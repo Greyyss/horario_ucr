@@ -1,0 +1,29 @@
+name: horario_ucr_integrador
+description: Sistema de declaraciones juradas de horario UCR
+publish_to: none
+version: 1.0.0+1
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  firebase_core: ^3.10.0
+  firebase_auth: ^5.4.0
+  cloud_firestore: ^5.6.0
+  firebase_storage: ^12.4.0
+  intl: ^0.20.2
+  pdf: ^3.11.2
+  printing: ^5.14.0
+  crypto: ^3.0.6
+  uuid: ^4.5.1
+  web_socket_channel: ^3.0.3
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/images/logo_ucr.png

@@ -1,0 +1,30 @@
+# Flutter y Dart
+.dart_tool/
+.packages
+.pub-cache/
+.pub/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.idea/
+*.iml
+
+# Firebase
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# Variables privadas y credenciales
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.p8
+*service-account*.json
+*serviceAccountKey*.json
+
+# Archivos del sistema
+.DS_Store
+Thumbs.db
