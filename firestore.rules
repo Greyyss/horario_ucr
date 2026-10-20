@@ -1,0 +1,48 @@
+rules_version = '2';
+service cloud.firestore {
+ match /databases/{database}/documents {
+  function signed() { return request.auth != null; }
+  function userDoc() { return get(/databases/$(database)/documents/users/$(request.auth.uid)); }
+  function role() { return signed() ? userDoc().data.role : 'none'; }
+  function staff() { return role() in ['admin','rrhh']; }
+  function owner(d) { return signed() && d.ownerId == request.auth.uid; }
+  function superior(d) { return signed() && d.superiorId == request.auth.uid && role() in ['superior','admin']; }
+  function canRead(d) { return owner(d) || superior(d) || staff(); }
+  match /users/{uid} {
+   allow read: if signed() && (request.auth.uid == uid || staff());
+   allow create: if signed() && request.auth.uid == uid && request.resource.data.role == 'declarante';
+   allow update: if signed() && ((request.auth.uid == uid && request.resource.data.role == resource.data.role) || role() == 'admin');
+   allow delete: if role() == 'admin';
+  }
+  match /periods/{id} {
+   allow read: if signed();
+   allow write: if role() == 'admin';
+  }
+  match /declarations/{id} {
+   allow read: if signed() && canRead(resource.data);
+   allow create: if signed() && owner(request.resource.data) && request.resource.data.status == 'BORRADOR' && request.resource.data.version == 1 && get(/databases/$(database)/documents/periods/$(request.resource.data.periodId)).data.enabled == true;
+   allow update: if signed() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','version','updatedAt','returnNote']) && (
+    (owner(resource.data) && ((resource.data.status == 'BORRADOR' && request.resource.data.status == 'VALIDADA') || (resource.data.status == 'VALIDADA' && request.resource.data.status == 'PENDIENTE_FIRMA_DECLARANTE') || (resource.data.status == 'PENDIENTE_FIRMA_DECLARANTE' && request.resource.data.status == 'FIRMADA_POR_DECLARANTE') || (resource.data.status == 'FIRMADA_POR_DECLARANTE' && request.resource.data.status == 'PENDIENTE_FIRMA_SUPERIOR') || (resource.data.status == 'DEVUELTA' && request.resource.data.status == 'BORRADOR' && request.resource.data.version == resource.data.version + 1))) ||
+    (superior(resource.data) && resource.data.status == 'PENDIENTE_FIRMA_SUPERIOR' && request.resource.data.status in ['DEVUELTA','FIRMADA_POR_SUPERIOR']) ||
+    (staff() && ((resource.data.status == 'FIRMADA_POR_SUPERIOR' && request.resource.data.status == 'ENVIADA_A_RRHH') || (resource.data.status == 'ENVIADA_A_RRHH' && request.resource.data.status == 'RECIBIDA_RRHH') || (resource.data.status == 'RECIBIDA_RRHH' && request.resource.data.status == 'FINALIZADA')))
+   ) || (signed() && owner(resource.data) && resource.data.status == 'BORRADOR' && request.resource.data.status == 'BORRADOR' && request.resource.data.ownerId == resource.data.ownerId && request.resource.data.version == resource.data.version);
+   allow delete: if false;
+   match /versions/{version} {
+    allow read: if signed() && canRead(get(/databases/$(database)/documents/declarations/$(id)).data);
+    allow create: if signed() && owner(get(/databases/$(database)/documents/declarations/$(id)).data) && request.resource.data.version is int;
+    allow update: if signed() && owner(get(/databases/$(database)/documents/declarations/$(id)).data) && get(/databases/$(database)/documents/declarations/$(id)).data.status == 'BORRADOR' && get(/databases/$(database)/documents/declarations/$(id)).data.version == request.resource.data.version;
+    allow delete: if false;
+    match /signatures/{sid} {
+     allow read: if signed() && canRead(get(/databases/$(database)/documents/declarations/$(id)).data);
+     allow create: if signed() && request.resource.data.userId == request.auth.uid && ((sid == 'owner' && owner(get(/databases/$(database)/documents/declarations/$(id)).data)) || (sid == 'superior' && superior(get(/databases/$(database)/documents/declarations/$(id)).data)));
+     allow update, delete: if false;
+    }
+   }
+   match /events/{eventId} {
+    allow read: if signed() && canRead(get(/databases/$(database)/documents/declarations/$(id)).data);
+    allow create: if signed() && request.resource.data.userId == request.auth.uid && canRead(get(/databases/$(database)/documents/declarations/$(id)).data);
+    allow update, delete: if false;
+   }
+  }
+ }
+}
