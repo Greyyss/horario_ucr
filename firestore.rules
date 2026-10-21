@@ -1,48 +1,373 @@
 rules_version = '2';
+
 service cloud.firestore {
- match /databases/{database}/documents {
-  function signed() { return request.auth != null; }
-  function userDoc() { return get(/databases/$(database)/documents/users/$(request.auth.uid)); }
-  function role() { return signed() ? userDoc().data.role : 'none'; }
-  function staff() { return role() in ['admin','rrhh']; }
-  function owner(d) { return signed() && d.ownerId == request.auth.uid; }
-  function superior(d) { return signed() && d.superiorId == request.auth.uid && role() in ['superior','admin']; }
-  function canRead(d) { return owner(d) || superior(d) || staff(); }
-  match /users/{uid} {
-   allow read: if signed() && (request.auth.uid == uid || staff());
-   allow create: if signed() && request.auth.uid == uid && request.resource.data.role == 'declarante';
-   allow update: if signed() && ((request.auth.uid == uid && request.resource.data.role == resource.data.role) || role() == 'admin');
-   allow delete: if role() == 'admin';
-  }
-  match /periods/{id} {
-   allow read: if signed();
-   allow write: if role() == 'admin';
-  }
-  match /declarations/{id} {
-   allow read: if signed() && canRead(resource.data);
-   allow create: if signed() && owner(request.resource.data) && request.resource.data.status == 'BORRADOR' && request.resource.data.version == 1 && get(/databases/$(database)/documents/periods/$(request.resource.data.periodId)).data.enabled == true;
-   allow update: if signed() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','version','updatedAt','returnNote']) && (
-    (owner(resource.data) && ((resource.data.status == 'BORRADOR' && request.resource.data.status == 'VALIDADA') || (resource.data.status == 'VALIDADA' && request.resource.data.status == 'PENDIENTE_FIRMA_DECLARANTE') || (resource.data.status == 'PENDIENTE_FIRMA_DECLARANTE' && request.resource.data.status == 'FIRMADA_POR_DECLARANTE') || (resource.data.status == 'FIRMADA_POR_DECLARANTE' && request.resource.data.status == 'PENDIENTE_FIRMA_SUPERIOR') || (resource.data.status == 'DEVUELTA' && request.resource.data.status == 'BORRADOR' && request.resource.data.version == resource.data.version + 1))) ||
-    (superior(resource.data) && resource.data.status == 'PENDIENTE_FIRMA_SUPERIOR' && request.resource.data.status in ['DEVUELTA','FIRMADA_POR_SUPERIOR']) ||
-    (staff() && ((resource.data.status == 'FIRMADA_POR_SUPERIOR' && request.resource.data.status == 'ENVIADA_A_RRHH') || (resource.data.status == 'ENVIADA_A_RRHH' && request.resource.data.status == 'RECIBIDA_RRHH') || (resource.data.status == 'RECIBIDA_RRHH' && request.resource.data.status == 'FINALIZADA')))
-   ) || (signed() && owner(resource.data) && resource.data.status == 'BORRADOR' && request.resource.data.status == 'BORRADOR' && request.resource.data.ownerId == resource.data.ownerId && request.resource.data.version == resource.data.version);
-   allow delete: if false;
-   match /versions/{version} {
-    allow read: if signed() && canRead(get(/databases/$(database)/documents/declarations/$(id)).data);
-    allow create: if signed() && owner(get(/databases/$(database)/documents/declarations/$(id)).data) && request.resource.data.version is int;
-    allow update: if signed() && owner(get(/databases/$(database)/documents/declarations/$(id)).data) && get(/databases/$(database)/documents/declarations/$(id)).data.status == 'BORRADOR' && get(/databases/$(database)/documents/declarations/$(id)).data.version == request.resource.data.version;
-    allow delete: if false;
-    match /signatures/{sid} {
-     allow read: if signed() && canRead(get(/databases/$(database)/documents/declarations/$(id)).data);
-     allow create: if signed() && request.resource.data.userId == request.auth.uid && ((sid == 'owner' && owner(get(/databases/$(database)/documents/declarations/$(id)).data)) || (sid == 'superior' && superior(get(/databases/$(database)/documents/declarations/$(id)).data)));
-     allow update, delete: if false;
+  match /databases/{database}/documents {
+
+    // FUNCIONES DE SEGURIDAD
+    function signed() {
+      return request.auth != null;
     }
-   }
-   match /events/{eventId} {
-    allow read: if signed() && canRead(get(/databases/$(database)/documents/declarations/$(id)).data);
-    allow create: if signed() && request.resource.data.userId == request.auth.uid && canRead(get(/databases/$(database)/documents/declarations/$(id)).data);
-    allow update, delete: if false;
-   }
-  }
- }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function role() {
+      return signed() ? userDoc().data.role : 'none';
+    }
+
+    function staff() {
+      return role() in ['admin', 'rrhh'];
+    }
+
+    function owner(d) {
+      return signed() && d.ownerId == request.auth.uid;
+    }
+
+    function superior(d) {
+      return signed() &&
+        d.superiorId == request.auth.uid &&
+        role() in ['superior', 'admin'];
+    }
+
+    function canRead(d) {
+      return owner(d) || superior(d) || staff();
+    }
+
+    function declarationAfter(id) {
+      return getAfter(/databases/$(database)/documents/declarations/$(id)).data;
+    }
+
+    function declarationBefore(id) {
+      return get(/databases/$(database)/documents/declarations/$(id)).data;
+    }
+
+    
+function validTransitionEvent(id) {
+  let before = declarationBefore(id);
+  let after = declarationAfter(id);
+  let event = request.resource.data.event;
+
+  return (
+    request.resource.data.previousStatus == before.status &&
+    request.resource.data.newStatus == after.status &&
+    request.resource.data.version == after.version &&
+    (
+      (
+        owner(before) &&
+        (
+          (event == 'validate' &&
+           before.status == 'BORRADOR' &&
+           after.status == 'VALIDADA') ||
+
+          (event == 'submit' &&
+           before.status == 'VALIDADA' &&
+           after.status == 'PENDIENTE_FIRMA_DECLARANTE') ||
+
+          (event == 'signOwner' &&
+           before.status == 'PENDIENTE_FIRMA_DECLARANTE' &&
+           after.status == 'FIRMADA_POR_DECLARANTE') ||
+
+          (event == 'route' &&
+           before.status == 'FIRMADA_POR_DECLARANTE' &&
+           after.status == 'PENDIENTE_FIRMA_SUPERIOR') ||
+
+          (event == 'newVersion' &&
+           before.status == 'DEVUELTA' &&
+           after.status == 'BORRADOR' &&
+           after.version == before.version + 1) ||
+
+          (event == 'annul' &&
+           before.status in ['BORRADOR', 'VALIDADA'] &&
+           after.status == 'ANULADA')
+        )
+      ) ||
+
+      (
+        superior(before) &&
+        (
+          (event == 'signSuperior' &&
+           before.status == 'PENDIENTE_FIRMA_SUPERIOR' &&
+           after.status == 'FIRMADA_POR_SUPERIOR') ||
+
+          (event == 'return' &&
+           before.status == 'PENDIENTE_FIRMA_SUPERIOR' &&
+           after.status == 'DEVUELTA' &&
+           after.returnNote is string &&
+           after.returnNote.size() > 0)
+        )
+      ) ||
+
+      (
+        staff() &&
+        (
+          (event == 'sendHr' &&
+           before.status == 'FIRMADA_POR_SUPERIOR' &&
+           after.status == 'ENVIADA_A_RRHH') ||
+
+          (event == 'receive' &&
+           before.status == 'ENVIADA_A_RRHH' &&
+           after.status == 'RECIBIDA_RRHH') ||
+
+          (event == 'finish' &&
+           before.status == 'RECIBIDA_RRHH' &&
+           after.status == 'FINALIZADA')
+        )
+      )
+    )
+  );
 }
+
+
+    // USUARIOS
+    match /users/{uid} {
+      allow read: if signed() && (request.auth.uid == uid || staff());
+
+      allow create: if signed() &&
+        request.auth.uid == uid &&
+        request.resource.data.role == 'declarante';
+
+      allow update: if signed() && (
+        (request.auth.uid == uid &&
+         request.resource.data.role == resource.data.role) ||
+        role() == 'admin'
+      );
+
+      allow delete: if role() == 'admin';
+    }
+
+    // PERIODOS ACADEMICOS
+    match /periods/{id} {
+      allow read: if signed();
+      allow write: if role() == 'admin';
+    }
+
+    // DECLARACIONES
+    match /declarations/{id} {
+      allow read: if signed() && canRead(resource.data);
+
+      allow create: if signed() &&
+        owner(request.resource.data) &&
+        request.resource.data.status == 'BORRADOR' &&
+        request.resource.data.version == 1 &&
+        get(/databases/$(database)/documents/periods/$(request.resource.data.periodId)).data.enabled == true;
+
+      allow update: if signed() && (
+        (
+          owner(resource.data) &&
+          request.resource.data.ownerId == resource.data.ownerId &&
+          request.resource.data.periodId == resource.data.periodId &&
+          request.resource.data.version == resource.data.version &&
+          resource.data.status == 'BORRADOR' &&
+          request.resource.data.status == 'BORRADOR' &&
+          
+request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+  'ownerName', 'identification', 'phone', 'email', 'unit',
+  'observations', 'appointments', 'externalJobs',
+  'updatedAt', 'lastEditEventId'
+]) &&
+request.resource.data.diff(resource.data).affectedKeys().hasAny([
+  'ownerName', 'identification', 'phone', 'email',
+  'unit', 'observations', 'appointments', 'externalJobs'
+]) &&
+request.resource.data.lastEditEventId is string &&
+request.resource.data.lastEditEventId != resource.data.get('lastEditEventId', '') &&
+!exists(
+  /databases/$(database)/documents/declarations/$(id)/events/$(request.resource.data.lastEditEventId)
+) &&
+existsAfter(
+  /databases/$(database)/documents/declarations/$(id)/events/$(request.resource.data.lastEditEventId)
+) &&
+getAfter(
+  /databases/$(database)/documents/declarations/$(id)/events/$(request.resource.data.lastEditEventId)
+).data.event == 'MODIFICADA' &&
+getAfter(
+  /databases/$(database)/documents/declarations/$(id)/events/$(request.resource.data.lastEditEventId)
+).data.userId == request.auth.uid
+
+        ) ||
+        (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'status', 'version', 'updatedAt', 'returnNote'
+          ]) &&
+          (
+            (
+              owner(resource.data) && (
+                (resource.data.status == 'BORRADOR' &&
+                 request.resource.data.status == 'VALIDADA') ||
+                (resource.data.status == 'VALIDADA' &&
+                 request.resource.data.status == 'PENDIENTE_FIRMA_DECLARANTE') ||
+                
+(resource.data.status == 'PENDIENTE_FIRMA_DECLARANTE' &&
+ request.resource.data.status == 'FIRMADA_POR_DECLARANTE' &&
+ existsAfter(
+   /databases/$(database)/documents/declarations/$(id)/versions/$(resource.data.version)/signatures/owner
+ ) &&
+ !exists(
+   /databases/$(database)/documents/declarations/$(id)/versions/$(resource.data.version)/signatures/owner
+ )) ||
+
+                (resource.data.status == 'FIRMADA_POR_DECLARANTE' &&
+                 request.resource.data.status == 'PENDIENTE_FIRMA_SUPERIOR') ||
+                (resource.data.status == 'DEVUELTA' &&
+                 request.resource.data.status == 'BORRADOR' &&
+                 request.resource.data.version == resource.data.version + 1) ||
+                (resource.data.status in ['BORRADOR', 'VALIDADA'] &&
+                 request.resource.data.status == 'ANULADA')
+              )
+            ) ||
+            
+            (
+              superior(resource.data) &&
+              resource.data.status == 'PENDIENTE_FIRMA_SUPERIOR' &&
+              (
+                (
+                  request.resource.data.status == 'FIRMADA_POR_SUPERIOR' &&
+                  !exists(
+                    /databases/$(database)/documents/declarations/$(id)/versions/$(resource.data.version)/signatures/superior
+                  ) &&
+                  existsAfter(
+                    /databases/$(database)/documents/declarations/$(id)/versions/$(resource.data.version)/signatures/superior
+                  )
+                ) ||
+                (
+                  request.resource.data.status == 'DEVUELTA' &&
+                  request.resource.data.returnNote is string &&
+                  request.resource.data.returnNote.size() > 0
+                )
+              )
+            ) ||
+
+            (
+              staff() && (
+                (resource.data.status == 'FIRMADA_POR_SUPERIOR' &&
+                 request.resource.data.status == 'ENVIADA_A_RRHH') ||
+                (resource.data.status == 'ENVIADA_A_RRHH' &&
+                 request.resource.data.status == 'RECIBIDA_RRHH') ||
+                (resource.data.status == 'RECIBIDA_RRHH' &&
+                 request.resource.data.status == 'FINALIZADA')
+              )
+            )
+          )
+        )
+      );
+
+      allow delete: if false;
+
+      // VERSIONES
+      match /versions/{version} {
+        allow read: if signed() && canRead(declarationBefore(id));
+
+        // getAfter permite comprobar la declaracion creada en el mismo batch.
+        allow create: if signed() &&
+          request.resource.data.version is int &&
+          request.resource.data.version == int(version) &&
+          owner(declarationAfter(id)) &&
+          declarationAfter(id).status == 'BORRADOR' &&
+          request.resource.data.version == declarationAfter(id).version;
+
+        allow update: if signed() &&
+          owner(declarationBefore(id)) &&
+          declarationBefore(id).status == 'BORRADOR' &&
+          resource.data.version == declarationBefore(id).version &&
+          request.resource.data.version == resource.data.version &&
+          request.resource.data.ownerId == resource.data.ownerId &&
+          request.resource.data.superiorId == resource.data.superiorId &&
+          request.resource.data.periodId == resource.data.periodId &&
+          request.resource.data.status == 'BORRADOR';
+
+        allow delete: if false;
+
+        
+match /signatures/{signatureId} {
+  allow read: if signed() && canRead(declarationBefore(id));
+
+  allow create: if signed() &&
+    request.resource.data.userId == request.auth.uid &&
+    request.resource.data.version == int(version) &&
+    (
+      (
+        signatureId == 'owner' &&
+        owner(declarationAfter(id)) &&
+        declarationBefore(id).status == 'PENDIENTE_FIRMA_DECLARANTE' &&
+        declarationAfter(id).status == 'FIRMADA_POR_DECLARANTE'
+      ) ||
+      (
+        signatureId == 'superior' &&
+        superior(declarationAfter(id)) &&
+        declarationBefore(id).status == 'PENDIENTE_FIRMA_SUPERIOR' &&
+        declarationAfter(id).status == 'FIRMADA_POR_SUPERIOR'
+      )
+    );
+
+  allow update, delete: if false;
+}
+      }
+
+
+      // HISTORIAL DE EVENTOS
+      match /events/{eventId} {
+        allow read: if signed() && canRead(declarationBefore(id));
+
+        // getAfter permite el evento de creacion en el mismo batch.
+       
+
+
+
+allow create: if signed() &&
+  request.resource.data.userId == request.auth.uid &&
+  (
+    (
+      
+
+request.resource.data.event == 'CREADA' &&
+!exists(/databases/$(database)/documents/declarations/$(id)) &&
+existsAfter(/databases/$(database)/documents/declarations/$(id)) &&
+owner(declarationAfter(id)) &&
+
+
+      request.resource.data.version == 1 &&
+      request.resource.data.previousStatus == 'BORRADOR' &&
+      request.resource.data.newStatus == 'BORRADOR' &&
+      declarationAfter(id).status == 'BORRADOR' &&
+      declarationAfter(id).version == 1
+    
+) ||
+(
+  request.resource.data.event == 'MODIFICADA' &&
+  owner(declarationBefore(id)) &&
+  
+declarationAfter(id).lastEditEventId == eventId &&
+request.resource.data.userId == request.auth.uid &&
+request.resource.data.version == declarationAfter(id).version &&
+
+  declarationBefore(id).status == 'BORRADOR' &&
+  declarationAfter(id).status == 'BORRADOR' &&
+  declarationBefore(id).version == declarationAfter(id).version &&
+  request.resource.data.version == declarationAfter(id).version &&
+  request.resource.data.previousStatus == 'BORRADOR' &&
+  request.resource.data.newStatus == 'BORRADOR' &&
+  request.resource.data.keys().hasAll([
+    'event', 'userId', 'dateTime', 'version',
+    'previousStatus', 'newStatus', 'observation'
+  ]) &&
+  request.resource.data.keys().hasOnly([
+    'event', 'userId', 'dateTime', 'version',
+    'previousStatus', 'newStatus', 'observation'
+  ]) &&
+  declarationBefore(id).diff(declarationAfter(id)).affectedKeys().hasAny([
+    'ownerName', 'identification', 'phone', 'email',
+    'unit', 'observations', 'appointments', 'externalJobs'
+  ])
+) ||
+validTransitionEvent(id)
+
+  );
+
+        allow update, delete: if false;
+      }
+    }
+  }
+}
+
+
