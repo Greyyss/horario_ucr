@@ -54,12 +54,14 @@ class DeclaraApp extends StatelessWidget {
       title: 'DeclaraHorario',
       debugShowCheckedModeBanner: false,
 
-      theme: ThemeData(
-        useMaterial3: true,
+     theme: ThemeData(
+  useMaterial3: true,
 
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF244D72),
-        ),
+  fontFamily: 'MyriadPro',
+
+  colorScheme: ColorScheme.fromSeed(
+    seedColor: const Color(0xFF244D72),
+  ),
 
         scaffoldBackgroundColor: const Color(0xFFF3F6FA),
 
