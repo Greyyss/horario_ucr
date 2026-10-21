@@ -89,9 +89,12 @@ class ValidationService {
       final startDate = DateTime.tryParse(job.startDate);
       final endDate = DateTime.tryParse(job.endDate);
 
-      if (startDate == null ||
-          endDate == null ||
-          endDate.isBefore(startDate)) {
+     final noEndDate =
+    job.endDate.trim().toLowerCase() == 'no aplica';
+
+if (startDate == null ||
+    (!noEndDate &&
+        (endDate == null || endDate.isBefore(startDate)))) {
         errors.add(
           'Vigencia inválida en ${job.workplace}.',
         );

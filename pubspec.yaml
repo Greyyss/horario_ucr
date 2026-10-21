@@ -35,6 +35,9 @@ flutter:
   assets:
     - assets/images/logo_ucr.png
     - assets/images/logo_declara_ucr.png
+    - assets/images/ucr_fondo.png
+    - assets/images/login_girasol_fondo.png
+
 
   fonts:
     - family: MyriadPro
