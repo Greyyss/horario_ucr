@@ -82,14 +82,22 @@ class DeclarationService {
       }
     }
 
-    final data = declaration.toMap();
+    
+final data = declaration.toMap();
 
-    data['ownerId'] = user.uid;
+data['ownerId'] = user.uid;
 
-    final versionReference =
-        reference.collection('versions').doc('${declaration.version}');
+final versionReference =
+    reference.collection('versions').doc('${declaration.version}');
 
-    final eventReference = reference.collection('events').doc();
+// Generar el identificador del evento antes de guardar.
+final eventReference = reference.collection('events').doc();
+
+// Asociar cada modificación con su evento de auditoría.
+if (!isNew) {
+  data['lastEditEventId'] = eventReference.id;
+}
+
 
     final batch = db.batch();
 
