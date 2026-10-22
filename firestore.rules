@@ -3,6 +3,100 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function validName(value) {
+  let letters =
+    "A-Za-zÁÉÍÓÚÜÑáéíóúüñÀÈÌÒÙàèìòùÂÊÎÔÛâêîôûÄËÏÖäëïöÇç";
+
+  return value is string
+    && value.size() >= 5
+    && value.size() <= 100
+    && value.matches(
+      "[" + letters + "]+([-’'][" + letters + "]+)*"
+      + "( [" + letters + "]+([-’'][" + letters + "]+)*)+"
+    );
+}
+
+function validIdentification(value) {
+  return value is string
+    && value.matches('[0-9]{9}');
+}
+
+function validPhone(value) {
+  return value is string
+    && value.matches('[0-9]{8}');
+}
+
+function validEmail(value) {
+  return value is string
+    && value.size() <= 254
+    && value.matches('[^@\\s]+@[^@\\s]+\\.[^@\\s]+');
+}
+
+function validUnit(value) {
+  return value is string
+    && value.size() >= 2
+    && value.size() <= 150
+    && value.matches('\\S([^\\r\\n\\t]*\\S)?');
+}
+
+function validPersonalData(data) {
+  return validName(data.get('ownerName', null))
+    && validIdentification(data.get('identification', null))
+    && validPhone(data.get('phone', null))
+    && validEmail(data.get('email', null))
+    && validUnit(data.get('unit', null))
+    && data.get('observations', null) is string
+    && data.observations.size() <= 2000;
+}
+
+function validInitialProfile(data) {
+  return validName(data.get('name', null))
+    && validEmail(data.get('email', null))
+    && (
+      data.get('identification', null) == ''
+      || validIdentification(data.get('identification', null))
+    )
+    && (
+      data.get('phone', null) == ''
+      || validPhone(data.get('phone', null))
+    )
+    && (
+      data.get('unit', null) == ''
+      || validUnit(data.get('unit', null))
+    );
+}
+
+function validProfileChanges() {
+  let changed =
+    request.resource.data.diff(resource.data).affectedKeys();
+
+  let data = request.resource.data;
+
+  return (
+      !changed.hasAny(['name'])
+      || validName(data.get('name', null))
+    )
+    && (
+      !changed.hasAny(['email'])
+      || validEmail(data.get('email', null))
+    )
+    && (
+      !changed.hasAny(['identification'])
+      || data.get('identification', null) == ''
+      || validIdentification(data.get('identification', null))
+    )
+    && (
+      !changed.hasAny(['phone'])
+      || data.get('phone', null) == ''
+      || validPhone(data.get('phone', null))
+    )
+    && (
+      !changed.hasAny(['unit'])
+      || data.get('unit', null) == ''
+      || validUnit(data.get('unit', null))
+    );
+}
+
     // FUNCIONES DE SEGURIDAD
     function signed() {
       return request.auth != null;
@@ -121,20 +215,26 @@ function validTransitionEvent(id) {
 
     // USUARIOS
     match /users/{uid} {
-      allow read: if signed() && (request.auth.uid == uid || staff());
+  allow read: if signed()
+    && (request.auth.uid == uid || staff());
 
-      allow create: if signed() &&
-        request.auth.uid == uid &&
-        request.resource.data.role == 'declarante';
+  allow create: if signed()
+    && request.auth.uid == uid
+    && request.resource.data.role == 'declarante'
+    && validInitialProfile(request.resource.data);
 
-      allow update: if signed() && (
-        (request.auth.uid == uid &&
-         request.resource.data.role == resource.data.role) ||
-        role() == 'admin'
-      );
+  allow update: if signed()
+    && validProfileChanges()
+    && (
+      (
+        request.auth.uid == uid
+        && request.resource.data.role == resource.data.role
+      )
+      || role() == 'admin'
+    );
 
-      allow delete: if role() == 'admin';
-    }
+  allow delete: if role() == 'admin';
+}
 
     // PERIODOS ACADEMICOS
     match /periods/{id} {
@@ -146,55 +246,19 @@ function validTransitionEvent(id) {
     match /declarations/{id} {
       allow read: if signed() && canRead(resource.data);
 
-      allow create: if signed() &&
-        owner(request.resource.data) &&
-        request.resource.data.status == 'BORRADOR' &&
-        request.resource.data.version == 1 &&
-        get(/databases/$(database)/documents/periods/$(request.resource.data.periodId)).data.enabled == true;
+      // Crear contenido solo mediante saveDeclarationValidated.
+      allow create: if false;
 
       allow update: if signed() && (
         (
-          owner(resource.data) &&
-          request.resource.data.ownerId == resource.data.ownerId &&
-          request.resource.data.periodId == resource.data.periodId &&
           request.resource.data.version == resource.data.version &&
-          resource.data.status == 'BORRADOR' &&
-          request.resource.data.status == 'BORRADOR' &&
-          
-request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-  'ownerName', 'identification', 'phone', 'email', 'unit',
-  'observations', 'appointments', 'externalJobs',
-  'updatedAt', 'lastEditEventId'
-]) &&
-request.resource.data.diff(resource.data).affectedKeys().hasAny([
-  'ownerName', 'identification', 'phone', 'email',
-  'unit', 'observations', 'appointments', 'externalJobs'
-]) &&
-request.resource.data.lastEditEventId is string &&
-request.resource.data.lastEditEventId != resource.data.get('lastEditEventId', '') &&
-!exists(
-  /databases/$(database)/documents/declarations/$(id)/events/$(request.resource.data.lastEditEventId)
-) &&
-existsAfter(
-  /databases/$(database)/documents/declarations/$(id)/events/$(request.resource.data.lastEditEventId)
-) &&
-getAfter(
-  /databases/$(database)/documents/declarations/$(id)/events/$(request.resource.data.lastEditEventId)
-).data.event == 'MODIFICADA' &&
-getAfter(
-  /databases/$(database)/documents/declarations/$(id)/events/$(request.resource.data.lastEditEventId)
-).data.userId == request.auth.uid
-
-        ) ||
-        (
           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'status', 'version', 'updatedAt', 'returnNote'
           ]) &&
           (
             (
               owner(resource.data) && (
-                (resource.data.status == 'BORRADOR' &&
-                 request.resource.data.status == 'VALIDADA') ||
+                false /* VALIDADA solo mediante el servidor */ ||
                 (resource.data.status == 'VALIDADA' &&
                  request.resource.data.status == 'PENDIENTE_FIRMA_DECLARANTE') ||
                 
@@ -209,9 +273,7 @@ getAfter(
 
                 (resource.data.status == 'FIRMADA_POR_DECLARANTE' &&
                  request.resource.data.status == 'PENDIENTE_FIRMA_SUPERIOR') ||
-                (resource.data.status == 'DEVUELTA' &&
-                 request.resource.data.status == 'BORRADOR' &&
-                 request.resource.data.version == resource.data.version + 1) ||
+                false /* Nueva version solo mediante el servidor */ ||
                 (resource.data.status in ['BORRADOR', 'VALIDADA'] &&
                  request.resource.data.status == 'ANULADA')
               )
@@ -259,26 +321,22 @@ getAfter(
         allow read: if signed() && canRead(declarationBefore(id));
 
         // getAfter permite comprobar la declaracion creada en el mismo batch.
-        allow create: if signed() &&
-          request.resource.data.version is int &&
-          request.resource.data.version == int(version) &&
-          owner(declarationAfter(id)) &&
-          declarationAfter(id).status == 'BORRADOR' &&
-          request.resource.data.version == declarationAfter(id).version;
+        allow create: if false; // Solo funciones de servidor.
 
-        allow update: if signed() &&
-          owner(declarationBefore(id)) &&
-          declarationBefore(id).status == 'BORRADOR' &&
-          resource.data.version == declarationBefore(id).version &&
-          request.resource.data.version == resource.data.version &&
-          request.resource.data.ownerId == resource.data.ownerId &&
-          request.resource.data.superiorId == resource.data.superiorId &&
-          request.resource.data.periodId == resource.data.periodId &&
-          request.resource.data.status == 'BORRADOR';
+        allow update: if false; // Solo funciones de servidor.
 
         allow delete: if false;
 
-        
+// Registro del PDF definitivo de esta versión.
+match /artifacts/{artifactId} {
+  allow read: if signed()
+    && artifactId == 'finalPdf'
+    && canRead(declarationBefore(id));
+
+  // Solo el backend administra este registro.
+  allow write: if false;
+}
+
 match /signatures/{signatureId} {
   allow read: if signed() && canRead(declarationBefore(id));
 
@@ -314,55 +372,10 @@ match /signatures/{signatureId} {
 
 
 
-allow create: if signed() &&
-  request.resource.data.userId == request.auth.uid &&
-  (
-    (
-      
-
-request.resource.data.event == 'CREADA' &&
-!exists(/databases/$(database)/documents/declarations/$(id)) &&
-existsAfter(/databases/$(database)/documents/declarations/$(id)) &&
-owner(declarationAfter(id)) &&
-
-
-      request.resource.data.version == 1 &&
-      request.resource.data.previousStatus == 'BORRADOR' &&
-      request.resource.data.newStatus == 'BORRADOR' &&
-      declarationAfter(id).status == 'BORRADOR' &&
-      declarationAfter(id).version == 1
-    
-) ||
-(
-  request.resource.data.event == 'MODIFICADA' &&
-  owner(declarationBefore(id)) &&
-  
-declarationAfter(id).lastEditEventId == eventId &&
-request.resource.data.userId == request.auth.uid &&
-request.resource.data.version == declarationAfter(id).version &&
-
-  declarationBefore(id).status == 'BORRADOR' &&
-  declarationAfter(id).status == 'BORRADOR' &&
-  declarationBefore(id).version == declarationAfter(id).version &&
-  request.resource.data.version == declarationAfter(id).version &&
-  request.resource.data.previousStatus == 'BORRADOR' &&
-  request.resource.data.newStatus == 'BORRADOR' &&
-  request.resource.data.keys().hasAll([
-    'event', 'userId', 'dateTime', 'version',
-    'previousStatus', 'newStatus', 'observation'
-  ]) &&
-  request.resource.data.keys().hasOnly([
-    'event', 'userId', 'dateTime', 'version',
-    'previousStatus', 'newStatus', 'observation'
-  ]) &&
-  declarationBefore(id).diff(declarationAfter(id)).affectedKeys().hasAny([
-    'ownerName', 'identification', 'phone', 'email',
-    'unit', 'observations', 'appointments', 'externalJobs'
-  ])
-) ||
-validTransitionEvent(id)
-
-  );
+allow create: if signed()
+          && request.resource.data.userId == request.auth.uid
+          && !(request.resource.data.event in ['CREADA', 'MODIFICADA', 'validate', 'newVersion'])
+          && validTransitionEvent(id);
 
         allow update, delete: if false;
       }

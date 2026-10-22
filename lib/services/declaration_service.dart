@@ -1,13 +1,18 @@
 import 'dart:convert';
+
 import 'package:flutter/services.dart';
-import 'package:pdf/widgets.dart' as pw;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:crypto/crypto.dart';
-import 'package:pdf/pdf.dart';
 import 'package:printing/printing.dart';
+
+import 'personal_data_validator.dart';
+
 import '../models/declaration.dart';
 import 'validation_service.dart';
+import 'declaration_pdf_layout.dart';
+
+import 'package:cloud_functions/cloud_functions.dart';
 
 class DeclarationService {
   final FirebaseFirestore db = FirebaseFirestore.instance;
@@ -23,10 +28,9 @@ class DeclarationService {
   // ==========================================================
 
   Stream<List<Declaration>> watchMine() {
-    return declarations
-        .where('ownerId', isEqualTo: user.uid)
-        .snapshots()
-        .map((snapshot) {
+    return declarations.where('ownerId', isEqualTo: user.uid).snapshots().map((
+      snapshot,
+    ) {
       final list = snapshot.docs.map(Declaration.fromDoc).toList();
 
       list.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
@@ -66,59 +70,33 @@ class DeclarationService {
     if (declaration.status != 'BORRADOR') {
       throw StateError('Solo se pueden guardar borradores.');
     }
-
-    final bool isNew = declaration.id.isEmpty;
-
-    final reference =
-        isNew ? declarations.doc() : declarations.doc(declaration.id);
-
-    if (!isNew) {
-      final snapshot = await reference.get();
-
-      if (!snapshot.exists ||
-          snapshot.data()?['ownerId'] != user.uid ||
-          snapshot.data()?['status'] != 'BORRADOR') {
-        throw StateError('No autorizado para editar esta declaración.');
+    PersonalDataValidator.ensureValid(declaration);
+    final callable = FirebaseFunctions.instanceFor(region: 'us-east1')
+        .httpsCallable('saveDeclarationValidated');
+    try {
+      final result = await callable.call(<String, dynamic>{
+        'id': declaration.id,
+        'version': declaration.version,
+        'periodId': declaration.periodId,
+        'superiorId': declaration.superiorId,
+        'ownerName': declaration.ownerName,
+        'identification': declaration.identification,
+        'phone': declaration.phone,
+        'email': declaration.email,
+        'unit': declaration.unit,
+        'observations': declaration.observations,
+        'appointments':
+            declaration.appointments.map((job) => job.toMap()).toList(),
+        'externalJobs':
+            declaration.externalJobs.map((job) => job.toMap()).toList(),
+      });
+      final response = Map<String, dynamic>.from(result.data as Map);
+      if (response['saved'] == false) {
+        throw StateError('No hay cambios para guardar.');
       }
+    } on FirebaseFunctionsException catch (error) {
+      throw StateError(error.message ?? 'No se pudo guardar la declaración.');
     }
-
-    
-final data = declaration.toMap();
-
-data['ownerId'] = user.uid;
-
-final versionReference =
-    reference.collection('versions').doc('${declaration.version}');
-
-// Generar el identificador del evento antes de guardar.
-final eventReference = reference.collection('events').doc();
-
-// Asociar cada modificación con su evento de auditoría.
-if (!isNew) {
-  data['lastEditEventId'] = eventReference.id;
-}
-
-
-    final batch = db.batch();
-
-    batch.set(reference, data);
-
-    batch.set(versionReference, {
-      ...data,
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-
-    batch.set(eventReference, {
-      'event': isNew ? 'CREADA' : 'MODIFICADA',
-      'userId': user.uid,
-      'dateTime': FieldValue.serverTimestamp(),
-      'version': declaration.version,
-      'previousStatus': declaration.status,
-      'newStatus': declaration.status,
-      'observation': '',
-    });
-
-    await batch.commit();
   }
 
   // ==========================================================
@@ -196,6 +174,10 @@ if (!isNew) {
       throw StateError('La devolución requiere observación.');
     }
 
+    if (action == 'validate') {
+      PersonalDataValidator.ensureValid(declaration);
+    }
+
     // Validar los horarios antes de continuar.
 
     if (action == 'validate' &&
@@ -206,12 +188,30 @@ if (!isNew) {
       throw StateError('Existen errores de validación.');
     }
 
+    // Estas acciones se verifican en el servidor sobre los datos guardados.
+    if (action == 'validate' || action == 'newVersion') {
+      final functionName = action == 'validate'
+          ? 'validateDeclarationSchedule'
+          : 'newDeclarationVersion';
+      try {
+        await FirebaseFunctions.instanceFor(region: 'us-east1')
+            .httpsCallable(functionName)
+            .call(<String, dynamic>{
+          'id': declaration.id,
+          'version': declaration.version,
+        });
+      } on FirebaseFunctionsException catch (error) {
+        throw StateError(
+          error.message ?? 'No se pudo actualizar la declaración.',
+        );
+      }
+      return;
+    }
+
     // Confirmar la declaración bajo juramento.
 
     if (action == 'signOwner' && !confirmed) {
-      throw StateError(
-        'Debe confirmar la declaración bajo juramento.',
-      );
+      throw StateError('Debe confirmar la declaración bajo juramento.');
     }
 
     // Verificar la identidad del declarante.
@@ -226,8 +226,7 @@ if (!isNew) {
       throw StateError('No autorizado.');
     }
 
-    final newVersion =
-        action == 'newVersion' ? declaration.version + 1 : declaration.version;
+    final newVersion = declaration.version;
 
     // Ejecutar los cambios en una transacción.
 
@@ -236,13 +235,7 @@ if (!isNew) {
 
       if (fresh.data()?['status'] != declaration.status ||
           fresh.data()?['version'] != declaration.version) {
-        throw StateError(
-          'La declaración cambió. Actualice la página.',
-        );
-      }
-
-      if (action == 'newVersion' && fresh.data()?['ownerId'] != user.uid) {
-        throw StateError('No autorizado.');
+        throw StateError('La declaración cambió. Actualice la página.');
       }
 
       transaction.update(reference, {
@@ -263,20 +256,6 @@ if (!isNew) {
         'observation': note,
       });
 
-      // Crear una nueva versión cuando se devuelve.
-
-      if (action == 'newVersion') {
-        transaction.set(
-          reference.collection('versions').doc('$newVersion'),
-          {
-            ...fresh.data()!,
-            'status': 'BORRADOR',
-            'version': newVersion,
-            'updatedAt': FieldValue.serverTimestamp(),
-          },
-        );
-      }
-
       // Registrar firmas electrónicas internas.
 
       if (action == 'signOwner' || action == 'signSuperior') {
@@ -290,9 +269,7 @@ if (!isNew) {
             .collection('versions')
             .doc('${declaration.version}')
             .collection('signatures')
-            .doc(
-              action == 'signOwner' ? 'owner' : 'superior',
-            );
+            .doc(action == 'signOwner' ? 'owner' : 'superior');
 
         transaction.set(signature, {
           'userId': user.uid,
@@ -311,9 +288,7 @@ if (!isNew) {
   // CONSULTAR HISTORIAL
   // ==========================================================
 
-  Stream<QuerySnapshot<Map<String, dynamic>>> timeline(
-    String id,
-  ) {
+  Stream<QuerySnapshot<Map<String, dynamic>>> timeline(String id) {
     return declarations
         .doc(id)
         .collection('events')
@@ -321,274 +296,170 @@ if (!isNew) {
         .snapshots();
   }
 
+  // Devuelve true si el PDF ya existía y se conservó el original.
+  Future<bool> archivePdf(Declaration declaration) async {
+    if (declaration.status != 'FINALIZADA') {
+      throw StateError(
+        'La declaración debe estar finalizada para archivar el PDF.',
+      );
+    }
+
+    final bytes = await _buildPdf(declaration);
+
+    if (bytes.isEmpty || bytes.length >= 10 * 1024 * 1024) {
+      throw StateError('El PDF debe pesar menos de 10 MiB.');
+    }
+
+    final callable =
+        FirebaseFunctions.instanceFor(region: 'us-east1').httpsCallable(
+      'archiveDeclarationPdf',
+      options: HttpsCallableOptions(timeout: const Duration(seconds: 120)),
+    );
+
+    final result = await callable.call({
+      'declarationId': declaration.id,
+      'version': declaration.version,
+      'pdfBase64': base64Encode(bytes),
+    });
+
+    final data = Map<String, dynamic>.from(result.data as Map);
+
+    return data['alreadyExists'] == true;
+  }
+
+  // Abre exactamente el archivo guardado en Storage.
+  Future<void> openArchivedPdf(Declaration declaration) async {
+    final callable =
+        FirebaseFunctions.instanceFor(region: 'us-east1').httpsCallable(
+      'downloadDeclarationPdf',
+      options: HttpsCallableOptions(timeout: const Duration(seconds: 120)),
+    );
+
+    final result = await callable.call({
+      'declarationId': declaration.id,
+      'version': declaration.version,
+    });
+
+    final data = Map<String, dynamic>.from(result.data as Map);
+    final encoded = data['pdfBase64'];
+    final expectedHash = data['sha256'];
+
+    if (encoded is! String || expectedHash is! String) {
+      throw StateError('La respuesta del PDF es inválida.');
+    }
+
+    final bytes = base64Decode(encoded);
+
+    if (bytes.isEmpty || bytes.length >= 10 * 1024 * 1024) {
+      throw StateError('El tamaño del PDF es inválido.');
+    }
+
+    if (sha256.convert(bytes).toString() != expectedHash) {
+      throw StateError(
+        'El PDF descargado no coincide con su huella registrada.',
+      );
+    }
+
+    await Printing.layoutPdf(
+      onLayout: (_) async => bytes,
+      name: 'Declaracion_${declaration.id}_v${declaration.version}.pdf',
+    );
+  }
   // ==========================================================
   // GENERAR PDF DE LA DECLARACION
   // ==========================================================
 
-  
-Future<void> generatePdf(Declaration declaration) async {
-  final version = await declarations
-      .doc(declaration.id)
-      .collection('versions')
-      .doc('${declaration.version}')
-      .get();
+  Future<Uint8List> _buildPdf(Declaration declaration) async {
+    final version = await declarations
+        .doc(declaration.id)
+        .collection('versions')
+        .doc('${declaration.version}')
+        .get();
 
-  final signatures = await declarations
-      .doc(declaration.id)
-      .collection('versions')
-      .doc('${declaration.version}')
-      .collection('signatures')
-      .get();
+    final signatures = await declarations
+        .doc(declaration.id)
+        .collection('versions')
+        .doc('${declaration.version}')
+        .collection('signatures')
+        .get();
 
-  final pdf = pw.Document();
+    if (!version.exists) {
+      throw StateError(
+        'No se encontró la versión guardada de esta declaración.',
+      );
+    }
 
-  final jobs = [
-    ...declaration.appointments,
-    ...declaration.externalJobs,
-  ];
+    final saved = Declaration.fromDoc(version);
 
-  final logoData = await rootBundle.load(
-  'assets/images/logo_ucr.png',
-);
+    if (saved.version != declaration.version ||
+        saved.ownerId != declaration.ownerId ||
+        saved.superiorId != declaration.superiorId) {
+      throw StateError('La versión guardada no coincide con la declaración.');
+    }
 
-final logoUcr = pw.MemoryImage(
-  logoData.buffer.asUint8List(),
-);
+    // Conservar el identificador y el estado del trámite.
+    // Tomar el contenido desde la versión guardada.
+    declaration = Declaration(
+      id: declaration.id,
+      ownerId: saved.ownerId,
+      ownerName: saved.ownerName,
+      identification: saved.identification,
+      phone: saved.phone,
+      email: saved.email,
+      unit: saved.unit,
+      periodId: saved.periodId,
+      superiorId: saved.superiorId,
+      status: declaration.status,
+      observations: saved.observations,
+      version: saved.version,
+      appointments: saved.appointments,
+      externalJobs: saved.externalJobs,
+      updatedAt: saved.updatedAt,
+    );
 
-  
-pdf.addPage(
-  pw.MultiPage(
-    pageFormat: PdfPageFormat.a4,
-    margin: const pw.EdgeInsets.all(40),
+    // Un PDF definitivo necesita las dos firmas de esa versión.
+    if (declaration.status == 'FINALIZADA') {
+      final signaturesById = {
+        for (final doc in signatures.docs) doc.id: doc.data(),
+      };
 
+      final ownerSignature = signaturesById['owner'];
+      final superiorSignature = signaturesById['superior'];
 
-header: (context) {
- return pw.Container(
-  width: double.infinity,
-  padding: const pw.EdgeInsets.only(bottom: 14),
-    decoration: pw.BoxDecoration(
-      border: pw.Border(
-        bottom: pw.BorderSide(
-          color: PdfColor.fromHex('#163A63'),
-          width: 2,
-        ),
+      if (ownerSignature?['userId'] != declaration.ownerId ||
+          superiorSignature?['userId'] != declaration.superiorId ||
+          ownerSignature?['version'] != declaration.version ||
+          superiorSignature?['version'] != declaration.version) {
+        throw StateError(
+          'Faltan firmas válidas para generar el PDF definitivo.',
+        );
+      }
+    }
+
+    final logoData = await rootBundle.load('assets/images/logo_ucr.png');
+    return buildDeclarationPdfTables(
+      declaration: declaration.toMap(),
+      signatures: signatures.docs.map((signature) {
+        final data = signature.data();
+        return <String, dynamic>{
+          ...data,
+          'type': signature.id,
+          'id': data['signatureId'] ?? signature.id,
+        };
+      }).toList(),
+      logoBytes: logoData.buffer.asUint8List(
+        logoData.offsetInBytes,
+        logoData.lengthInBytes,
       ),
-    ),
-    child: pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Image(
-          logoUcr,
-          width: 250,
-          height: 75,
-          fit: pw.BoxFit.contain,
-        ),
+    );
+  }
 
-        pw.SizedBox(height: 8),
+  Future<void> generatePdf(Declaration declaration) async {
+    final bytes = await _buildPdf(declaration);
 
-        pw.Text(
-          'Sistema DeclaraHorario',
-          style: pw.TextStyle(
-            fontSize: 10,
-            fontWeight: pw.FontWeight.bold,
-            color: PdfColor.fromHex('#163A63'),
-          ),
-        ),
-
-        pw.Text(
-          'Período ${declaration.periodId}',
-          style: const pw.TextStyle(
-            fontSize: 9,
-          ),
-        ),
-      ],
-    ),
-  );
-},
-
-
-  
-footer: (context) {
-  return pw.Container(
-    padding: const pw.EdgeInsets.only(top: 10),
-    decoration: pw.BoxDecoration(
-      border: pw.Border(
-        top: pw.BorderSide(
-          color: PdfColors.grey300,
-          width: 0.7,
-        ),
-      ),
-    ),
-    child: pw.Column(
-      mainAxisSize: pw.MainAxisSize.min,
-      children: [
-        pw.Text(
-          'Registro electrónico interno académico. '
-          'No equivale a firma digital certificada.',
-          style: const pw.TextStyle(
-            fontSize: 8,
-            color: PdfColors.grey700,
-          ),
-          textAlign: pw.TextAlign.center,
-        ),
-
-        pw.SizedBox(height: 6),
-
-        pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-          children: [
-            pw.Text(
-              'Universidad de Costa Rica | DeclaraHorario',
-              style: const pw.TextStyle(
-                fontSize: 8,
-                color: PdfColors.grey700,
-              ),
-            ),
-            pw.Text(
-              'Versión ${declaration.version} | '
-              'Página ${context.pageNumber} de '
-              '${context.pagesCount}',
-              style: const pw.TextStyle(
-                fontSize: 8,
-                color: PdfColors.grey700,
-              ),
-            ),
-          ],
-        ),
-      ],
-    ),
-  );
-},
-  
-
-    build: (context) => [
-      pw.SizedBox(height: 24),
-
-        pw.Text(
-          'Declaración Jurada de Horario y Jornada de Trabajo',
-        ),
-
-        pw.SizedBox(height: 14),
-
-       
-pw.Text(
-  'DATOS DEL DECLARANTE',
-  style: pw.TextStyle(
-    fontSize: 12,
-    fontWeight: pw.FontWeight.bold,
-  ),
-),
-
-pw.SizedBox(height: 12),
-
-pw.Text('Nombre completo: ${declaration.ownerName}'),
-pw.SizedBox(height: 7),
-
-pw.Text('Identificación: ${declaration.identification}'),
-pw.SizedBox(height: 7),
-
-pw.Text('Teléfono: ${declaration.phone}'),
-pw.SizedBox(height: 7),
-
-pw.Text('Correo electrónico: ${declaration.email}'),
-pw.SizedBox(height: 7),
-
-pw.Text('Unidad: ${declaration.unit}'),
-pw.SizedBox(height: 7),
-
-pw.Text('Período académico: ${declaration.periodId}'),
-pw.SizedBox(height: 7),
-
-pw.Text('Versión: ${declaration.version}'),
-pw.SizedBox(height: 7),
-
-pw.Text('Estado: ${declaration.status}'),
-
-pw.SizedBox(height: 18),
-
-
-        pw.SizedBox(height: 12),
-
-        // Nombramientos y trabajos externos.
-        ...jobs.asMap().entries.expand((entry) {
-          final job = entry.value;
-
-          final type = entry.key < declaration.appointments.length
-              ? 'Nombramiento'
-              : 'Otra institución';
-
-          return [
-            pw.Text(
-              '$type: ${job.workplace}',
-              style: pw.TextStyle(
-                fontWeight: pw.FontWeight.bold,
-              ),
-            ),
-
-            pw.Text(
-              'Cargo: ${job.position}  |  '
-              'Jornada: ${job.expectedHours} h',
-            ),
-
-            pw.Text(
-              'Vigencia: ${job.startDate} a ${job.endDate}',
-            ),
-
-            ...job.blocks.map((block) {
-              return pw.Text(
-                'Día ${block.day}: '
-                '${block.start} - ${block.end}',
-              );
-            }),
-
-            pw.SizedBox(height: 9),
-          ];
-        }),
-
-        pw.Text(
-          'Observaciones: ${declaration.observations}',
-        ),
-
-        pw.SizedBox(height: 14),
-
-        pw.Text(
-          'Declaro bajo juramento que los datos '
-          'consignados son veraces.',
-        ),
-
-        pw.SizedBox(height: 10),
-
-        // Firmas electrónicas internas.
-        ...signatures.docs.map((signature) {
-          final data = signature.data();
-
-          return pw.Text(
-            'Firma interna ${data['type']}: '
-            '${data['name']} | '
-            'ID: ${data['signatureId']} | '
-            'Huella: ${data['hash']}',
-          );
-        }),
-
-        pw.SizedBox(height: 12),
-
-
-        if (!version.exists)
-          pw.Text(
-            'Advertencia: no se encontró la '
-            'instantánea de versión.',
-          ),
-      ],
-    ),
-  );
-
-  // Generar el PDF sin utilizar Firebase Storage.
-  final bytes = await pdf.save();
-
-  // Abrir la opción de impresión o guardado como PDF.
-  await Printing.layoutPdf(
-    onLayout: (_) async => bytes,
-    name: 'Declaracion_${declaration.id}_v${declaration.version}',
-  );
-}
+    await Printing.layoutPdf(
+      onLayout: (_) async => bytes,
+      name: 'Declaracion_${declaration.id}_v${declaration.version}.pdf',
+    );
+  }
 }

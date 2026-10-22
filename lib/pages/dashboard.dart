@@ -10,6 +10,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/declaration.dart';
 import '../services/declaration_service.dart';
 import '../services/validation_service.dart';
+import '../services/personal_data_validator.dart';
 
 const days = [
   '',
@@ -36,7 +37,11 @@ class _DashboardState extends State<Dashboard> {
     setState(() {
       for (var i = 0; i < _notices.length; i++) {
         final notice = _notices[i];
-        _notices[i] = (message: notice.message, receivedAt: notice.receivedAt, read: true);
+        _notices[i] = (
+          message: notice.message,
+          receivedAt: notice.receivedAt,
+          read: true
+        );
       }
     });
     showDialog<void>(
@@ -52,7 +57,8 @@ class _DashboardState extends State<Dashboard> {
           child: _notices.isEmpty
               ? const Padding(
                   padding: EdgeInsets.symmetric(vertical: 28),
-                  child: Text('Todavía no recibiste notificaciones en esta sesión.'),
+                  child: Text(
+                      'Todavía no recibiste notificaciones en esta sesión.'),
                 )
               : ConstrainedBox(
                   constraints: const BoxConstraints(maxHeight: 380),
@@ -70,7 +76,8 @@ class _DashboardState extends State<Dashboard> {
                           '${time.minute.toString().padLeft(2, '0')}';
                       return ListTile(
                         contentPadding: const EdgeInsets.symmetric(vertical: 5),
-                        leading: const Icon(Icons.info_outline, color: UcrColors.blue),
+                        leading: const Icon(Icons.info_outline,
+                            color: UcrColors.blue),
                         title: Text(notice.message),
                         subtitle: Text(dateText),
                       );
@@ -89,7 +96,8 @@ class _DashboardState extends State<Dashboard> {
   }
 
   Widget _notificationBell() => IconButton(
-        tooltip: 'Notificaciones${_unreadCount > 0 ? ' ($_unreadCount nuevas)' : ''}',
+        tooltip:
+            'Notificaciones${_unreadCount > 0 ? ' ($_unreadCount nuevas)' : ''}',
         onPressed: _openNotifications,
         icon: Badge(
           isLabelVisible: _unreadCount > 0,
@@ -99,6 +107,7 @@ class _DashboardState extends State<Dashboard> {
       );
 
   final service = DeclarationService();
+  final Set<String> _pdfBusy = {};
   final webSocketService = WebSocketService();
   String role = 'declarante';
   Map<String, dynamic> profile = {};
@@ -199,6 +208,59 @@ class _DashboardState extends State<Dashboard> {
       });
   }
 
+  Future<void> _runPdf(Declaration d, String action) async {
+    if (_pdfBusy.contains(d.id)) return;
+
+    setState(() => _pdfBusy.add(d.id));
+
+    try {
+      switch (action) {
+        case 'archive':
+          final alreadyExists = await service.archivePdf(d);
+
+          if (!mounted) return;
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                alreadyExists
+                    ? 'El PDF ya estaba archivado. Se conservó el original.'
+                    : 'PDF archivado correctamente.',
+              ),
+            ),
+          );
+          break;
+
+        case 'open':
+          await service.openArchivedPdf(d);
+          break;
+
+        case 'preview':
+          await service.generatePdf(d);
+          break;
+
+        default:
+          throw StateError('Acción de PDF desconocida.');
+      }
+    } catch (error) {
+      if (!mounted) return;
+
+      final message =
+          error is StateError ? error.message.toString() : error.toString();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo completar la operación: $message'),
+          duration: const Duration(seconds: 8),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _pdfBusy.remove(d.id));
+      }
+    }
+  }
+
   Future<void> act(Declaration d, String action,
       {String note = '', bool confirmed = false}) async {
     try {
@@ -262,11 +324,6 @@ class _DashboardState extends State<Dashboard> {
                     ])));
     if (ok == true) await act(d, 'signOwner', confirmed: true);
   }
-
-  
-
-
-
 
   // Presentación institucional; las transiciones y permisos permanecen en los servicios.
 
@@ -457,10 +514,36 @@ class _DashboardState extends State<Dashboard> {
                   MaterialPageRoute(builder: (_) => TimelinePage(id: d.id))),
               icon: const Icon(Icons.history, size: 16),
               label: const Text('Historial')),
-          OutlinedButton.icon(
-              onPressed: () => service.generatePdf(d),
+          if (d.status != 'FINALIZADA')
+            OutlinedButton.icon(
+              onPressed:
+                  _pdfBusy.contains(d.id) ? null : () => _runPdf(d, 'preview'),
               icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
-              label: const Text('PDF')),
+              label: const Text('Vista previa PDF'),
+            ),
+          if (d.status == 'FINALIZADA' && (role == 'rrhh' || role == 'admin'))
+            OutlinedButton.icon(
+              onPressed:
+                  _pdfBusy.contains(d.id) ? null : () => _runPdf(d, 'archive'),
+              icon: const Icon(Icons.cloud_upload_outlined, size: 16),
+              label: const Text('Archivar PDF'),
+            ),
+          if (d.status == 'FINALIZADA')
+            OutlinedButton.icon(
+              onPressed:
+                  _pdfBusy.contains(d.id) ? null : () => _runPdf(d, 'open'),
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 16),
+              label: const Text('Abrir PDF archivado'),
+            ),
+          if (_pdfBusy.contains(d.id))
+            const Padding(
+              padding: EdgeInsets.all(8),
+              child: SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+            ),
         ],
       );
 
@@ -901,111 +984,105 @@ class _DashboardState extends State<Dashboard> {
     return raw.isEmpty ? 'Usuario' : raw.split(RegExp(r'\s+')).first;
   }
 
-  
-
-Widget _welcomeBanner() => Container(
-      height: 236,
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(13),
-        border: Border.all(
-          color: const Color(0xFFD8E8F5),
+  Widget _welcomeBanner() => Container(
+        height: 236,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(13),
+          border: Border.all(
+            color: const Color(0xFFD8E8F5),
+          ),
+          color: const Color(0xFFF5FAFF),
         ),
-        color: const Color(0xFFF5FAFF),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final width = constraints.maxWidth;
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth;
 
-          return Stack(
-            children: [
-              // Fotografía real de la UCR
-              
+            return Stack(
+              children: [
+                // Fotografía real de la UCR
 
-Positioned(
-  top: 0,
-  bottom: 0,
-  right: 0,
-  width: width * 0.57,
-  child: Image.asset(
-    'assets/images/ucr_fondo.png',
-    fit: BoxFit.cover,
-    alignment: Alignment.center,
-  ),
-),
-
-
-
-              // Curvas azules sobre la fotografía
-              Positioned.fill(
-                child: CustomPaint(
-                  painter: _WelcomeCurvePainter(),
+                Positioned(
+                  top: 0,
+                  bottom: 0,
+                  right: 0,
+                  width: width * 0.57,
+                  child: Image.asset(
+                    'assets/images/ucr_fondo.png',
+                    fit: BoxFit.cover,
+                    alignment: Alignment.center,
+                  ),
                 ),
-              ),
 
-              // Textos originales de bienvenida
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 28,
-                  vertical: 24,
+                // Curvas azules sobre la fotografía
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _WelcomeCurvePainter(),
+                  ),
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'B I E N V E N I D A',
-                      style: TextStyle(
-                        color: Color(0xFF496E9E),
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      _displayName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 42,
-                        height: 1.1,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFF07194D),
-                      ),
-                    ),
-                    const SizedBox(height: 9),
-                    const Text(
-                      'Sistema de declaración de horarios',
-                      style: TextStyle(
-                        color: Color(0xFF41699C),
-                        fontSize: 19,
-                      ),
-                    ),
-                    const SizedBox(height: 9),
-                    const Text(
-                      'Gestioná tus declaraciones de forma sencilla y segura.',
-                      style: TextStyle(
-                        color: Color(0xFF5476A4),
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    Container(
-                      width: 55,
-                      height: 3,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2795F0),
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
 
+                // Textos originales de bienvenida
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 28,
+                    vertical: 24,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'B I E N V E N I D A',
+                        style: TextStyle(
+                          color: Color(0xFF496E9E),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 42,
+                          height: 1.1,
+                          fontWeight: FontWeight.w900,
+                          color: Color(0xFF07194D),
+                        ),
+                      ),
+                      const SizedBox(height: 9),
+                      const Text(
+                        'Sistema de declaración de horarios',
+                        style: TextStyle(
+                          color: Color(0xFF41699C),
+                          fontSize: 19,
+                        ),
+                      ),
+                      const SizedBox(height: 9),
+                      const Text(
+                        'Gestioná tus declaraciones de forma sencilla y segura.',
+                        style: TextStyle(
+                          color: Color(0xFF5476A4),
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      Container(
+                        width: 55,
+                        height: 3,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2795F0),
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      );
 
   Widget _sideItem(String label, IconData icon, VoidCallback onTap,
       {bool selected = false}) {
@@ -1030,7 +1107,7 @@ Positioned(
                     ])))));
   }
 
-Widget _sidebar(List<Declaration> list) {
+  Widget _sidebar(List<Declaration> list) {
     return Container(
       width: 232,
       decoration: const BoxDecoration(
@@ -1069,12 +1146,13 @@ Widget _sidebar(List<Declaration> list) {
         const Spacer(),
         const Padding(
             padding: EdgeInsets.all(20),
-            child: Text('UCR\nUniversidad de Costa Rica',
+            child: Text('Universidad de Costa Rica',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.white, fontSize: 15))),
       ]),
     );
   }
+
   Future<void> _chooseHistory(List<Declaration> list) async {
     if (list.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -1527,7 +1605,6 @@ Widget _sidebar(List<Declaration> list) {
                                           ]),
                                     ]),
                               ),
-              
                               if (snapshot.hasError)
                                 _message(
                                     'No fue posible cargar las declaraciones: ${snapshot.error}')
@@ -1633,7 +1710,6 @@ Widget _sidebar(List<Declaration> list) {
             borderRadius: BorderRadius.circular(10)),
         child: Text(message, style: const TextStyle(color: UcrColors.text)),
       );
-
 }
 
 class EditorPage extends StatefulWidget {
@@ -1646,6 +1722,7 @@ class EditorPage extends StatefulWidget {
 class _EditorPageState extends State<EditorPage> {
   final service = DeclarationService();
   final fields = List.generate(8, (_) => TextEditingController());
+  final _formKey = GlobalKey<FormState>();
   final jobs = <Appointment>[];
   final external = <Appointment>[];
   bool busy = false;
@@ -1658,7 +1735,10 @@ class _EditorPageState extends State<EditorPage> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) return;
     try {
-      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
       final data = doc.data();
       final fromProfile = (data?['name'] ?? '').toString().trim();
       final fromAuth = (user.displayName ?? '').trim();
@@ -1718,11 +1798,60 @@ class _EditorPageState extends State<EditorPage> {
     }
   }
 
+  String? _validatePersonalField(int index, String? value) {
+    switch (index) {
+      case 0:
+        return PersonalDataValidator.name(value);
+
+      case 1:
+        return PersonalDataValidator.identification(value);
+
+      case 2:
+        return PersonalDataValidator.phone(value);
+
+      case 3:
+        return PersonalDataValidator.email(value);
+
+      case 4:
+        return PersonalDataValidator.unit(value);
+
+      case 5:
+        return PersonalDataValidator.observations(value);
+
+      default:
+        return null;
+    }
+  }
+
   Future<void> save() async {
+    if (busy) return;
+
+    if (!_nameLoaded) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Esperá a que se cargue tu nombre registrado.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    fields[0].text = PersonalDataValidator.normalizeName(_registeredName);
+
+    for (final index in [1, 2, 3, 4, 5]) {
+      fields[index].text = fields[index].text.trim();
+    }
+
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      return;
+    }
+
     setState(() => busy = true);
     try {
       if (!_nameLoaded || _registeredName.isEmpty) {
-        throw StateError('No se pudo cargar tu nombre registrado. Revisá tu perfil.');
+        throw StateError(
+            'No se pudo cargar tu nombre registrado. Revisá tu perfil.');
       }
       final p = await FirebaseFirestore.instance
           .collection('periods')
@@ -1739,7 +1868,7 @@ class _EditorPageState extends State<EditorPage> {
       final d = Declaration(
           id: widget.existing?.id ?? '',
           ownerId: FirebaseAuth.instance.currentUser!.uid,
-          ownerName: _registeredName,
+          ownerName: fields[0].text.trim(),
           identification: fields[1].text.trim(),
           phone: fields[2].text.trim(),
           email: fields[3].text.trim(),
@@ -1777,22 +1906,42 @@ class _EditorPageState extends State<EditorPage> {
         filled: true,
         fillColor: Colors.white,
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 17),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 17),
       );
 
-  Widget _input(int index, String label, IconData icon,
-      {int maxLines = 1}) => TextField(
-        controller: fields[index],
-        readOnly: index == 0,
-        maxLines: maxLines,
-        keyboardType: index == 2 ? TextInputType.phone : index == 3 ? TextInputType.emailAddress : TextInputType.text,
-        decoration: _fieldStyle(label, icon),
-      );
+  Widget _input(
+    int index,
+    String label,
+    IconData icon, {
+    int maxLines = 1,
+  }) {
+    return TextFormField(
+      controller: fields[index],
+      readOnly: index == 0,
+      maxLines: maxLines,
+      autovalidateMode: AutovalidateMode.onUserInteraction,
+      validator: (value) {
+        return _validatePersonalField(index, value);
+      },
+      keyboardType: index == 1
+          ? TextInputType.number
+          : index == 2
+              ? TextInputType.phone
+              : index == 3
+                  ? TextInputType.emailAddress
+                  : TextInputType.text,
+      decoration: _fieldStyle(label, icon).copyWith(
+        errorMaxLines: 3,
+      ),
+    );
+  }
 
   Widget _pair(Widget first, Widget second) => LayoutBuilder(
         builder: (context, constraints) {
           if (constraints.maxWidth < 580) {
-            return Column(children: [first, const SizedBox(height: 14), second]);
+            return Column(
+                children: [first, const SizedBox(height: 14), second]);
           }
           return Row(children: [
             Expanded(child: first),
@@ -1807,10 +1956,12 @@ class _EditorPageState extends State<EditorPage> {
         child: Row(children: [
           Icon(icon, color: UcrColors.blue, size: 23),
           const SizedBox(width: 10),
-          Text(title, style: const TextStyle(
-            fontSize: 18, fontWeight: FontWeight.w800,
-            color: Color(0xFF123663),
-          )),
+          Text(title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: Color(0xFF123663),
+              )),
         ]),
       );
 
@@ -1821,15 +1972,20 @@ class _EditorPageState extends State<EditorPage> {
           border: Border.all(color: const Color(0xFFD7E8F7)),
           borderRadius: BorderRadius.circular(16),
         ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
+        child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
       );
 
-  Widget _periodDropdown() => StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: FirebaseFirestore.instance.collection('periods')
-            .where('enabled', isEqualTo: true).snapshots(),
+  Widget _periodDropdown() =>
+      StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: FirebaseFirestore.instance
+            .collection('periods')
+            .where('enabled', isEqualTo: true)
+            .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
-            return Text('No se pudieron consultar los períodos: ${snapshot.error}',
+            return Text(
+                'No se pudieron consultar los períodos: ${snapshot.error}',
                 style: const TextStyle(color: Colors.red));
           }
           if (!snapshot.hasData) return const LinearProgressIndicator();
@@ -1839,21 +1995,27 @@ class _EditorPageState extends State<EditorPage> {
           // Conservar el valor de un borrador antiguo aunque ya esté deshabilitado.
           final items = <DropdownMenuItem<String>>[
             if (current.isNotEmpty && !available)
-              DropdownMenuItem(value: current,
-                  child: Text('$current (período anterior)', overflow: TextOverflow.ellipsis)),
+              DropdownMenuItem(
+                  value: current,
+                  child: Text('$current (período anterior)',
+                      overflow: TextOverflow.ellipsis)),
             for (final doc in docs)
               DropdownMenuItem(
                 value: doc.id,
-                child: Text((doc.data()['name'] ?? doc.data()['label'] ?? doc.id).toString(),
+                child: Text(
+                    (doc.data()['name'] ?? doc.data()['label'] ?? doc.id)
+                        .toString(),
                     overflow: TextOverflow.ellipsis),
               ),
           ];
-          if (items.isEmpty) return const Text('No hay períodos activos disponibles.');
+          if (items.isEmpty)
+            return const Text('No hay períodos activos disponibles.');
           return DropdownButtonFormField<String>(
             key: ValueKey('period-$current'),
             initialValue: current.isEmpty ? null : current,
             isExpanded: true,
-            decoration: _fieldStyle('Período activo', Icons.event_available_outlined),
+            decoration:
+                _fieldStyle('Período activo', Icons.event_available_outlined),
             hint: const Text('Seleccioná un período'),
             items: items,
             onChanged: (value) => setState(() => fields[6].text = value ?? ''),
@@ -1868,74 +2030,93 @@ class _EditorPageState extends State<EditorPage> {
       appBar: AppBar(
         backgroundColor: UcrColors.blue,
         foregroundColor: Colors.white,
-        title: Text(widget.existing == null ? 'Nueva declaración' : 'Editar declaración'),
+        title: Text(widget.existing == null
+            ? 'Nueva declaración'
+            : 'Editar declaración'),
       ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 980),
-          child: ListView(
-            padding: const EdgeInsets.all(22),
-            children: [
-              const Text('Datos de la declaración', style: TextStyle(
-                fontSize: 26, fontWeight: FontWeight.w800, color: Color(0xFF123663))),
-              const SizedBox(height: 6),
-              const Text('Completá la información y agregá tus horarios.',
-                style: TextStyle(color: Color(0xFF55749A))),
-              const SizedBox(height: 22),
-              _panel([
-                _heading('Información personal', Icons.person_outline),
-                _pair(
-                  _input(0, 'Nombre completo (registrado)', Icons.lock_outline),
-                  _input(1, 'Identificación', Icons.credit_card_outlined),
-                ),
-                const SizedBox(height: 14),
-                _pair(
-                  _input(3, 'Correo electrónico', Icons.mail_outline),
-                  _input(2, 'Teléfono', Icons.phone_outlined),
-                ),
-              ]),
-              const SizedBox(height: 16),
-              _panel([
-                _heading('Información institucional', Icons.account_balance_outlined),
-                _input(4, 'Unidad académica o administrativa', Icons.apartment_outlined),
-                const SizedBox(height: 14),
-                _pair(
-                  _periodDropdown(),
-                  _input(7, 'UID del superior', Icons.supervisor_account_outlined),
-                ),
-              ]),
-              const SizedBox(height: 16),
-              _panel([
-                _heading('Observaciones adicionales', Icons.notes_outlined),
-                _input(5, 'Observaciones (opcional)', Icons.edit_note_outlined, maxLines: 3),
-              ]),
-              const SizedBox(height: 16),
-              section('Nombramientos', jobs, false),
-              const SizedBox(height: 12),
-              section('Otras instituciones', external, true),
-              const SizedBox(height: 12),
-              Builder(builder: (ctx) {
-                final result = ValidationService.validate(jobs, external);
-                return Card(
-                  elevation: 0,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text('Horas institucionales: ${result.institutionalHours.toStringAsFixed(2)} / ${result.expectedHours.toStringAsFixed(2)} esperadas'),
-                      Text('Horas externas: ${result.externalHours.toStringAsFixed(2)}'),
-                      ...result.errors.map((e) => Text('• $e',
-                        style: const TextStyle(color: Colors.deepOrange))),
-                    ]),
+          child: Form(
+            key: _formKey,
+            child: ListView(
+              padding: const EdgeInsets.all(22),
+              children: [
+                const Text('Datos de la declaración',
+                    style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w800,
+                        color: Color(0xFF123663))),
+                const SizedBox(height: 6),
+                const Text('Completá la información y agregá tus horarios.',
+                    style: TextStyle(color: Color(0xFF55749A))),
+                const SizedBox(height: 22),
+                _panel([
+                  _heading('Información personal', Icons.person_outline),
+                  _pair(
+                    _input(
+                        0, 'Nombre completo (registrado)', Icons.lock_outline),
+                    _input(1, 'Identificación', Icons.credit_card_outlined),
                   ),
-                );
-              }),
-              const SizedBox(height: 16),
-              FilledButton.icon(
-                onPressed: busy ? null : save,
-                icon: const Icon(Icons.save_outlined),
-                label: Text(busy ? 'Guardando...' : 'Guardar borrador'),
-              ),
-            ],
+                  const SizedBox(height: 14),
+                  _pair(
+                    _input(3, 'Correo electrónico', Icons.mail_outline),
+                    _input(2, 'Teléfono', Icons.phone_outlined),
+                  ),
+                ]),
+                const SizedBox(height: 16),
+                _panel([
+                  _heading('Información institucional',
+                      Icons.account_balance_outlined),
+                  _input(4, 'Unidad académica o administrativa',
+                      Icons.apartment_outlined),
+                  const SizedBox(height: 14),
+                  _pair(
+                    _periodDropdown(),
+                    _input(7, 'UID del superior',
+                        Icons.supervisor_account_outlined),
+                  ),
+                ]),
+                const SizedBox(height: 16),
+                _panel([
+                  _heading('Observaciones adicionales', Icons.notes_outlined),
+                  _input(
+                      5, 'Observaciones (opcional)', Icons.edit_note_outlined,
+                      maxLines: 3),
+                ]),
+                const SizedBox(height: 16),
+                section('Nombramientos', jobs, false),
+                const SizedBox(height: 12),
+                section('Otras instituciones', external, true),
+                const SizedBox(height: 12),
+                Builder(builder: (ctx) {
+                  final result = ValidationService.validate(jobs, external);
+                  return Card(
+                    elevation: 0,
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                                'Horas institucionales: ${result.institutionalHours.toStringAsFixed(2)} / ${result.expectedHours.toStringAsFixed(2)} esperadas'),
+                            Text(
+                                'Horas externas: ${result.externalHours.toStringAsFixed(2)}'),
+                            ...result.errors.map((e) => Text('• $e',
+                                style:
+                                    const TextStyle(color: Colors.deepOrange))),
+                          ]),
+                    ),
+                  );
+                }),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: busy ? null : save,
+                  icon: const Icon(Icons.save_outlined),
+                  label: Text(busy ? 'Guardando...' : 'Guardar borrador'),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -2039,7 +2220,8 @@ class _AppointmentPageState extends State<AppointmentPage> {
       f[1].text = appointment.position;
       f[2].text = appointment.expectedHours.toString();
       f[3].text = appointment.startDate;
-      noEndDate = appointment.endDate.trim().toLowerCase() == 'no aplica' || appointment.endDate.trim().isEmpty;
+      noEndDate = appointment.endDate.trim().toLowerCase() == 'no aplica' ||
+          appointment.endDate.trim().isEmpty;
       f[4].text = noEndDate ? '' : appointment.endDate;
       blocks.addAll(appointment.blocks);
     }
@@ -2056,7 +2238,8 @@ class _AppointmentPageState extends State<AppointmentPage> {
   }
 
   Future<void> _chooseDate(TextEditingController controller) async {
-    final initial = DateTime.tryParse(controller.text.trim()) ?? DateTime.now();
+    final initial =
+        ValidationService.parseDate(controller.text.trim()) ?? DateTime.now();
     final chosen = await showDatePicker(
       context: context,
       initialDate: initial,
@@ -2078,9 +2261,12 @@ class _AppointmentPageState extends State<AppointmentPage> {
     final parsedHour = parts.isNotEmpty ? int.tryParse(parts[0]) : null;
     final parsedMinute = parts.length > 1 ? int.tryParse(parts[1]) : null;
     int hour = (parsedHour != null && parsedHour >= 0 && parsedHour < 24)
-        ? parsedHour : 8;
-    int minute = (parsedMinute != null && parsedMinute >= 0 && parsedMinute < 60)
-        ? parsedMinute : 0;
+        ? parsedHour
+        : 8;
+    int minute =
+        (parsedMinute != null && parsedMinute >= 0 && parsedMinute < 60)
+            ? parsedMinute
+            : 0;
 
     final hourController = FixedExtentScrollController(initialItem: hour);
     final minuteController = FixedExtentScrollController(initialItem: minute);
@@ -2101,8 +2287,10 @@ class _AppointmentPageState extends State<AppointmentPage> {
               children: [
                 const Text(
                   'Seleccionar hora',
-                  style: TextStyle(color: Colors.white, fontSize: 18,
-                    fontWeight: FontWeight.w600),
+                  style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 12),
                 SizedBox(
@@ -2138,27 +2326,33 @@ class _AppointmentPageState extends State<AppointmentPage> {
                                     squeeze: 1.0,
                                     useMagnifier: false,
                                     selectionOverlay: null,
-                                    onSelectedItemChanged: (value) => hour = value,
-                                    children: List.generate(24, (index) => Center(
-                                      child: Text(
-                                        index.toString().padLeft(2, '0'),
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 25,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    )),
+                                    onSelectedItemChanged: (value) =>
+                                        hour = value,
+                                    children: List.generate(
+                                        24,
+                                        (index) => Center(
+                                              child: Text(
+                                                index
+                                                    .toString()
+                                                    .padLeft(2, '0'),
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 25,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            )),
                                   ),
                                 ),
                                 const SizedBox(
                                   width: 26,
                                   child: Center(
-                                    child: Text(':', style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 26,
-                                      fontWeight: FontWeight.bold,
-                                    )),
+                                    child: Text(':',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 26,
+                                          fontWeight: FontWeight.bold,
+                                        )),
                                   ),
                                 ),
                                 SizedBox(
@@ -2170,17 +2364,22 @@ class _AppointmentPageState extends State<AppointmentPage> {
                                     squeeze: 1.0,
                                     useMagnifier: false,
                                     selectionOverlay: null,
-                                    onSelectedItemChanged: (value) => minute = value,
-                                    children: List.generate(60, (index) => Center(
-                                      child: Text(
-                                        index.toString().padLeft(2, '0'),
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontSize: 25,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    )),
+                                    onSelectedItemChanged: (value) =>
+                                        minute = value,
+                                    children: List.generate(
+                                        60,
+                                        (index) => Center(
+                                              child: Text(
+                                                index
+                                                    .toString()
+                                                    .padLeft(2, '0'),
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 25,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            )),
                                   ),
                                 ),
                               ],
@@ -2202,7 +2401,7 @@ class _AppointmentPageState extends State<AppointmentPage> {
                     TextButton(
                       onPressed: () => Navigator.pop(dialogContext, true),
                       child: const Text('Aceptar',
-                        style: TextStyle(fontWeight: FontWeight.bold)),
+                          style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),
@@ -2255,39 +2454,46 @@ class _AppointmentPageState extends State<AppointmentPage> {
                           decoration: InputDecoration(
                             labelText: labels[i],
                             hintText: 'No aplica',
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12)),
                           ),
                         )
                       : i >= 3
-                      ? TextField(
-                          controller: f[i],
-                          readOnly: true,
-                          onTap: () => _chooseDate(f[i]),
-                          decoration: InputDecoration(
-                            labelText: labels[i],
-                            suffixIcon: IconButton(
-                              tooltip: 'Abrir calendario',
-                              icon: const Icon(Icons.event_outlined),
-                              onPressed: () => _chooseDate(f[i]),
+                          ? TextField(
+                              controller: f[i],
+                              readOnly: true,
+                              onTap: () => _chooseDate(f[i]),
+                              decoration: InputDecoration(
+                                labelText: labels[i],
+                                suffixIcon: IconButton(
+                                  tooltip: 'Abrir calendario',
+                                  icon: const Icon(Icons.event_outlined),
+                                  onPressed: () => _chooseDate(f[i]),
+                                ),
+                                border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12)),
+                              ),
+                            )
+                          : TextField(
+                              controller: f[i],
+                              keyboardType: i == 2
+                                  ? const TextInputType.numberWithOptions(
+                                      decimal: true)
+                                  : TextInputType.text,
+                              decoration: InputDecoration(
+                                labelText: labels[i],
+                                border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12)),
+                              ),
                             ),
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                        )
-                      : TextField(
-                          controller: f[i],
-                          keyboardType: i == 2 ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
-                          decoration: InputDecoration(
-                            labelText: labels[i],
-                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                        ),
                 ),
               CheckboxListTile(
                 value: noEndDate,
                 contentPadding: EdgeInsets.zero,
                 controlAffinity: ListTileControlAffinity.leading,
                 title: const Text('No aplica'),
-                subtitle: const Text('El nombramiento no tiene fecha de finalización definida'),
+                subtitle: const Text(
+                    'El nombramiento no tiene fecha de finalización definida'),
                 onChanged: (value) => setState(() {
                   noEndDate = value ?? false;
                   if (noEndDate) f[4].clear();
@@ -2372,23 +2578,34 @@ class _AppointmentPageState extends State<AppointmentPage> {
               FilledButton(
                 onPressed: () {
                   final expected = double.tryParse(f[2].text.trim());
+
                   if (f[0].text.trim().isEmpty ||
+                      f[1].text.trim().isEmpty ||
                       blocks.isEmpty ||
                       expected == null ||
+                      !expected.isFinite ||
                       expected <= 0) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text(
-                            'Complete institución, jornada válida y bloques'),
+                            'Completá institución, puesto, una jornada numérica mayor que cero y al menos un horario.'),
                       ),
                     );
                     return;
                   }
-                  final beginDate = DateTime.tryParse(f[3].text.trim());
-                  final finishDate = DateTime.tryParse(f[4].text.trim());
-                  if (beginDate == null || (!noEndDate && (finishDate == null || finishDate.isBefore(beginDate)))) {
+                  final beginDate =
+                      ValidationService.parseDate(f[3].text.trim());
+
+                  final finishDate =
+                      ValidationService.parseDate(f[4].text.trim());
+                  if (beginDate == null ||
+                      (!noEndDate &&
+                          (finishDate == null ||
+                              finishDate.isBefore(beginDate)))) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Seleccioná fechas válidas; el fin no puede ser anterior al inicio.')),
+                      const SnackBar(
+                          content: Text(
+                              'Seleccioná fechas válidas; el fin no puede ser anterior al inicio.')),
                     );
                     return;
                   }
@@ -2446,6 +2663,7 @@ class TimelinePage extends StatelessWidget {
             }).toList());
           }));
 }
+
 class _WelcomeCurvePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
@@ -2453,24 +2671,25 @@ class _WelcomeCurvePainter extends CustomPainter {
     final h = size.height;
 
     // Capa celeste de transición
-    
-    
+
     // Curva exterior celeste
     final outerPath = Path()
       ..moveTo(0, 0)
       ..lineTo(w * 0.52, 0)
       ..cubicTo(
-        w * 0.64, h * 0.25,
-        w * 0.64, h * 0.75,
-        w * 0.58, h,
+        w * 0.64,
+        h * 0.25,
+        w * 0.64,
+        h * 0.75,
+        w * 0.58,
+        h,
       )
       ..lineTo(0, h)
       ..close();
 
     canvas.drawPath(
       outerPath,
-      Paint()
-        ..color = const Color(0xFF4BA9ED).withValues(alpha: 0.70),
+      Paint()..color = const Color(0xFF4BA9ED).withValues(alpha: 0.70),
     );
 
     // Segunda curva azul claro
@@ -2478,17 +2697,19 @@ class _WelcomeCurvePainter extends CustomPainter {
       ..moveTo(0, 0)
       ..lineTo(w * 0.48, 0)
       ..cubicTo(
-        w * 0.60, h * 0.25,
-        w * 0.60, h * 0.75,
-        w * 0.54, h,
+        w * 0.60,
+        h * 0.25,
+        w * 0.60,
+        h * 0.75,
+        w * 0.54,
+        h,
       )
       ..lineTo(0, h)
       ..close();
 
     canvas.drawPath(
       middlePath,
-      Paint()
-        ..color = const Color(0xFFB7E3FF).withValues(alpha: 0.96),
+      Paint()..color = const Color(0xFFB7E3FF).withValues(alpha: 0.96),
     );
 
     // Curva principal blanca-celeste
@@ -2496,9 +2717,12 @@ class _WelcomeCurvePainter extends CustomPainter {
       ..moveTo(0, 0)
       ..lineTo(w * 0.43, 0)
       ..cubicTo(
-        w * 0.55, h * 0.25,
-        w * 0.55, h * 0.75,
-        w * 0.49, h,
+        w * 0.55,
+        h * 0.25,
+        w * 0.55,
+        h * 0.75,
+        w * 0.49,
+        h,
       )
       ..lineTo(0, h)
       ..close();
@@ -2518,8 +2742,8 @@ class _WelcomeCurvePainter extends CustomPainter {
     );
   }
 
-   @override
+  @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) {
     return false;
-  } 
+  }
 }

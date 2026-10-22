@@ -1,4 +1,3 @@
-
 import '../models/declaration.dart';
 
 class ValidationResult {
@@ -18,6 +17,24 @@ class ValidationResult {
 }
 
 class ValidationService {
+  // Evita que Dart convierta fechas inexistentes en otras fechas.
+  static DateTime? parseDate(String value) {
+    if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value)) {
+      return null;
+    }
+    final year = int.parse(value.substring(0, 4));
+    final month = int.parse(value.substring(5, 7));
+    final day = int.parse(value.substring(8, 10));
+    if (year < 1 || month < 1 || month > 12 || day < 1 || day > 31) {
+      return null;
+    }
+    final date = DateTime(year, month, day);
+    if (date.year != year || date.month != month || date.day != day) {
+      return null;
+    }
+    return date;
+  }
+
   static int minutes(String time) {
     final parts = time.split(':');
 
@@ -53,20 +70,14 @@ class ValidationService {
   ) {
     final errors = <String>[];
 
-    final byDay = <int, List<({
-      int start,
-      int end,
-      String source,
-    })>>{};
+    final byDay = <int, List<({int start, int end, String source})>>{};
 
     double internal = 0;
     double outside = 0;
     double expected = 0;
 
     if (jobs.isEmpty) {
-      errors.add(
-        'Debe registrar al menos un nombramiento institucional.',
-      );
+      errors.add('Debe registrar al menos un nombramiento institucional.');
     }
 
     final allJobs = [
@@ -81,33 +92,34 @@ class ValidationService {
           job.position.trim().isEmpty ||
           job.startDate.isEmpty ||
           job.endDate.isEmpty) {
+        errors.add('Complete los datos del nombramiento: ${job.workplace}.');
+      }
+
+      final startDate = parseDate(job.startDate);
+      final endDate = parseDate(job.endDate);
+
+      final noEndDate = job.endDate.trim().toLowerCase() == 'no aplica';
+
+      if (startDate == null ||
+          (!noEndDate && (endDate == null || endDate.isBefore(startDate)))) {
+        errors.add('Vigencia inválida en ${job.workplace}.');
+      }
+
+      final validExpectedHours =
+          job.expectedHours.isFinite && job.expectedHours > 0;
+      if (!validExpectedHours) {
         errors.add(
-          'Complete los datos del nombramiento: ${job.workplace}.',
+          'La jornada debe ser un número finito mayor que cero '
+          'en ${job.workplace}.',
         );
       }
 
-      final startDate = DateTime.tryParse(job.startDate);
-      final endDate = DateTime.tryParse(job.endDate);
-
-     final noEndDate =
-    job.endDate.trim().toLowerCase() == 'no aplica';
-
-if (startDate == null ||
-    (!noEndDate &&
-        (endDate == null || endDate.isBefore(startDate)))) {
-        errors.add(
-          'Vigencia inválida en ${job.workplace}.',
-        );
-      }
-
-      if (!entry.external) {
+      if (!entry.external && validExpectedHours) {
         expected += job.expectedHours;
       }
 
       if (job.blocks.isEmpty) {
-        errors.add(
-          'Agregue al menos un horario a ${job.workplace}.',
-        );
+        errors.add('Agregue al menos un horario a ${job.workplace}.');
       }
 
       for (final block in job.blocks) {
@@ -116,9 +128,7 @@ if (startDate == null ||
           final end = minutes(block.end);
 
           if (block.day < 1 || block.day > 6) {
-            errors.add(
-              'Solo se admiten horarios de lunes a sábado.',
-            );
+            errors.add('Solo se admiten horarios de lunes a sábado.');
             continue;
           }
 
@@ -137,10 +147,7 @@ if (startDate == null ||
             );
           }
 
-          byDay.putIfAbsent(
-            block.day,
-            () => [],
-          ).add((
+          byDay.putIfAbsent(block.day, () => []).add((
             start: start,
             end: end,
             source: job.workplace,
@@ -154,9 +161,7 @@ if (startDate == null ||
             internal += hours;
           }
         } catch (_) {
-          errors.add(
-            'Formato de hora inválido en ${job.workplace}.',
-          );
+          errors.add('Formato de hora inválido en ${job.workplace}.');
         }
       }
     }
@@ -164,9 +169,7 @@ if (startDate == null ||
     for (final entry in byDay.entries) {
       final blocks = entry.value;
 
-      blocks.sort(
-        (a, b) => a.start.compareTo(b.start),
-      );
+      blocks.sort((a, b) => a.start.compareTo(b.start));
 
       // Calcular minutos únicos, sin duplicar traslapes.
       int totalMinutes = 0;
@@ -205,17 +208,11 @@ if (startDate == null ||
           final first = blocks[j];
           final second = blocks[i];
 
-          if (first.end > second.start &&
-              second.end > first.start) {
+          if (first.end > second.start && second.end > first.start) {
             final overlapStart =
-                first.start > second.start
-                    ? first.start
-                    : second.start;
+                first.start > second.start ? first.start : second.start;
 
-            final overlapEnd =
-                first.end < second.end
-                    ? first.end
-                    : second.end;
+            final overlapEnd = first.end < second.end ? first.end : second.end;
 
             errors.add(
               'Día ${entry.key}: traslape '
@@ -237,11 +234,6 @@ if (startDate == null ||
       );
     }
 
-    return ValidationResult(
-      errors,
-      internal,
-      outside,
-      expected,
-    );
+    return ValidationResult(errors, internal, outside, expected);
   }
 }
