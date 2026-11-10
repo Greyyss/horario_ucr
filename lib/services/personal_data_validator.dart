@@ -1,8 +1,7 @@
 import '../models/declaration.dart';
 
 class PersonalDataValidator {
-  static const letters =
-      'A-Za-zÁÉÍÓÚÜÑáéíóúüñÀÈÌÒÙàèìòù'
+  static const letters = 'A-Za-zÁÉÍÓÚÜÑáéíóúüñÀÈÌÒÙàèìòù'
       'ÂÊÎÔÛâêîôûÄËÏÖäëïöÇç';
 
   static final _namePattern = RegExp(
@@ -10,8 +9,7 @@ class PersonalDataValidator {
     "(?: [$letters]+(?:[-'’][$letters]+)*)+\$",
   );
 
-  static final _emailPattern =
-      RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+  static final _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
 
   static String normalizeName(String value) =>
       value.trim().replaceAll(RegExp(r'\s+'), ' ');

@@ -51,8 +51,7 @@ class _PersonalProfilePageState extends State<PersonalProfilePage> {
     } catch (_) {
       if (!mounted) return;
       setState(() {
-        _error =
-            'No se pudieron cargar tus datos. Revisá tu conexión '
+        _error = 'No se pudieron cargar tus datos. Revisá tu conexión '
             'y volvé a intentarlo.';
       });
     } finally {
@@ -119,9 +118,9 @@ class _PersonalProfilePageState extends State<PersonalProfilePage> {
       if (!mounted) return;
       final message = error.code == 'permission-denied'
           ? 'No se autorizó el cambio. La cédula guardada no se puede '
-                'modificar. Si el dato es incorrecto, contactá al administrador.'
+              'modificar. Si el dato es incorrecto, contactá al administrador.'
           : 'No se pudieron guardar los datos. Revisá tu conexión '
-                'y volvé a intentarlo.';
+              'y volvé a intentarlo.';
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(message)));
     } catch (_) {
@@ -150,9 +149,8 @@ class _PersonalProfilePageState extends State<PersonalProfilePage> {
         readOnly: readOnly,
         keyboardType: keyboardType,
         maxLength: digits,
-        inputFormatters: digits == null
-            ? null
-            : [FilteringTextInputFormatter.digitsOnly],
+        inputFormatters:
+            digits == null ? null : [FilteringTextInputFormatter.digitsOnly],
         autovalidateMode: AutovalidateMode.onUserInteraction,
         validator: validator,
         decoration: InputDecoration(
@@ -182,90 +180,91 @@ class _PersonalProfilePageState extends State<PersonalProfilePage> {
         body: _loading
             ? const Center(child: CircularProgressIndicator())
             : _error != null
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(_error!, textAlign: TextAlign.center),
-                      const SizedBox(height: 16),
-                      FilledButton(
-                        onPressed: _load,
-                        child: const Text('Reintentar'),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            : Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 680),
-                  child: AbsorbPointer(
-                    absorbing: _saving,
-                    child: Form(
-                      key: _formKey,
-                      child: ListView(
-                        padding: const EdgeInsets.all(24),
+                ? Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Text(
-                            'Estos datos se usan para completar tus declaraciones. '
-                            'Podés actualizar tu nombre, teléfono, correo de contacto '
-                            'y unidad. La cédula se registra una sola vez.',
-                          ),
-                          const SizedBox(height: 24),
-                          _field(
-                            controller: _name,
-                            label: 'Nombre y apellidos',
-                            validator: PersonalDataValidator.name,
-                          ),
-                          _field(
-                            controller: _identification,
-                            label: 'Cédula',
-                            keyboardType: TextInputType.number,
-                            digits: 9,
-                            readOnly: _identificationLocked,
-                            validator: PersonalDataValidator.identification,
-                            helperText: _identificationLocked
-                                ? 'Cédula registrada. Si cometiste un error, '
-                                      'solicitá una revisión al administrador.'
-                                : 'Revisá los 9 dígitos: después de guardar '
-                                      'la cédula quedará bloqueada.',
-                          ),
-                          _field(
-                            controller: _phone,
-                            label: 'Teléfono',
-                            keyboardType: TextInputType.phone,
-                            digits: 8,
-                            validator: PersonalDataValidator.phone,
-                          ),
-                          _field(
-                            controller: _email,
-                            label: 'Correo de contacto',
-                            keyboardType: TextInputType.emailAddress,
-                            validator: PersonalDataValidator.email,
-                            helperText:
-                                'Se usa en las declaraciones. '
-                                'Cambiarlo aquí no cambia tu correo para iniciar sesión.',
-                          ),
-                          _field(
-                            controller: _unit,
-                            label: 'Unidad académica o administrativa',
-                            validator: PersonalDataValidator.unit,
-                          ),
-                          FilledButton.icon(
-                            onPressed: _saving ? null : _save,
-                            icon: const Icon(Icons.save_outlined),
-                            label: Text(
-                              _saving ? 'Guardando...' : 'Guardar mis datos',
-                            ),
+                          Text(_error!, textAlign: TextAlign.center),
+                          const SizedBox(height: 16),
+                          FilledButton(
+                            onPressed: _load,
+                            child: const Text('Reintentar'),
                           ),
                         ],
                       ),
                     ),
+                  )
+                : Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 680),
+                      child: AbsorbPointer(
+                        absorbing: _saving,
+                        child: Form(
+                          key: _formKey,
+                          child: ListView(
+                            padding: const EdgeInsets.all(24),
+                            children: [
+                              const Text(
+                                'Estos datos se usan para completar tus declaraciones. '
+                                'Podés actualizar tu nombre, teléfono, correo de contacto '
+                                'y unidad. La cédula se registra una sola vez.',
+                              ),
+                              const SizedBox(height: 24),
+                              _field(
+                                controller: _name,
+                                label: 'Nombre y apellidos',
+                                validator: PersonalDataValidator.name,
+                              ),
+                              _field(
+                                controller: _identification,
+                                label: 'Cédula',
+                                keyboardType: TextInputType.number,
+                                digits: 9,
+                                readOnly: _identificationLocked,
+                                validator: PersonalDataValidator.identification,
+                                helperText: _identificationLocked
+                                    ? 'Cédula registrada. Si cometiste un error, '
+                                        'solicitá una revisión al administrador.'
+                                    : 'Revisá los 9 dígitos: después de guardar '
+                                        'la cédula quedará bloqueada.',
+                              ),
+                              _field(
+                                controller: _phone,
+                                label: 'Teléfono',
+                                keyboardType: TextInputType.phone,
+                                digits: 8,
+                                validator: PersonalDataValidator.phone,
+                              ),
+                              _field(
+                                controller: _email,
+                                label: 'Correo de contacto',
+                                keyboardType: TextInputType.emailAddress,
+                                validator: PersonalDataValidator.email,
+                                helperText: 'Se usa en las declaraciones. '
+                                    'Cambiarlo aquí no cambia tu correo para iniciar sesión.',
+                              ),
+                              _field(
+                                controller: _unit,
+                                label: 'Unidad académica o administrativa',
+                                validator: PersonalDataValidator.unit,
+                              ),
+                              FilledButton.icon(
+                                onPressed: _saving ? null : _save,
+                                icon: const Icon(Icons.save_outlined),
+                                label: Text(
+                                  _saving
+                                      ? 'Guardando...'
+                                      : 'Guardar mis datos',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-              ),
       ),
     );
   }

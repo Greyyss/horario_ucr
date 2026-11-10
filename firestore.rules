@@ -106,10 +106,10 @@ function validProfileChanges() {
       return signed() && d.ownerId == request.auth.uid;
     }
 
-    function superior(d) {
-      return signed() &&
-        d.superiorId == request.auth.uid &&
-        role() in ['superior', 'admin'];
+       function superior(d) {
+      return signed()
+        && d.superiorId == request.auth.uid
+        && role() == 'superior';
     }
 
     function canRead(d) {
@@ -125,80 +125,90 @@ function validProfileChanges() {
     }
 
     
-function validTransitionEvent(id) {
-  let before = declarationBefore(id);
-  let after = declarationAfter(id);
-  let event = request.resource.data.event;
+    function validTransitionEvent(id) {
+      let before = declarationBefore(id);
+      let after = declarationAfter(id);
+      let event = request.resource.data.event;
 
-  return (
-    request.resource.data.previousStatus == before.status &&
-    request.resource.data.newStatus == after.status &&
-    request.resource.data.version == after.version &&
-    (
-      (
-        owner(before) &&
-        (
-          (event == 'validate' &&
-           before.status == 'BORRADOR' &&
-           after.status == 'VALIDADA') ||
-
-          (event == 'submit' &&
-           before.status == 'VALIDADA' &&
-           after.status == 'PENDIENTE_FIRMA_DECLARANTE') ||
-
-          (event == 'signOwner' &&
-           before.status == 'PENDIENTE_FIRMA_DECLARANTE' &&
-           after.status == 'FIRMADA_POR_DECLARANTE') ||
-
-          (event == 'route' &&
-           before.status == 'FIRMADA_POR_DECLARANTE' &&
-           after.status == 'PENDIENTE_FIRMA_SUPERIOR') ||
-
-          (event == 'newVersion' &&
-           before.status == 'DEVUELTA' &&
-           after.status == 'BORRADOR' &&
-           after.version == before.version + 1) ||
-
-          (event == 'annul' &&
-           before.status in ['BORRADOR', 'VALIDADA'] &&
-           after.status == 'ANULADA')
-        )
-      ) ||
-
-      (
-        superior(before) &&
-        (
-          (event == 'signSuperior' &&
-           before.status == 'PENDIENTE_FIRMA_SUPERIOR' &&
-           after.status == 'FIRMADA_POR_SUPERIOR') ||
-
-          (event == 'return' &&
-           before.status == 'PENDIENTE_FIRMA_SUPERIOR' &&
-           after.status == 'DEVUELTA' &&
-           after.returnNote is string &&
-           after.returnNote.size() > 0)
-        )
-      ) ||
-
-      (
-        staff() &&
-        (
-          (event == 'sendHr' &&
-           before.status == 'FIRMADA_POR_SUPERIOR' &&
-           after.status == 'ENVIADA_A_RRHH') ||
-
-          (event == 'receive' &&
-           before.status == 'ENVIADA_A_RRHH' &&
-           after.status == 'RECIBIDA_RRHH') ||
-
-          (event == 'finish' &&
-           before.status == 'RECIBIDA_RRHH' &&
-           after.status == 'FINALIZADA')
-        )
-      )
-    )
-  );
-}
+      return request.resource.data.previousStatus == before.status
+        && request.resource.data.newStatus == after.status
+        && request.resource.data.version == after.version
+        && (
+          (
+            owner(before)
+            && (
+              (
+                event == 'validate'
+                && before.status == 'BORRADOR'
+                && after.status == 'VALIDADA'
+              )
+              || (
+                event == 'submit'
+                && before.status == 'VALIDADA'
+                && after.status == 'PENDIENTE_FIRMA_DECLARANTE'
+              )
+              || (
+                event == 'signOwner'
+                && before.status == 'PENDIENTE_FIRMA_DECLARANTE'
+                && after.status == 'FIRMADA_POR_DECLARANTE'
+              )
+              || (
+                event == 'route'
+                && before.status == 'FIRMADA_POR_DECLARANTE'
+                && after.status == 'PENDIENTE_FIRMA_SUPERIOR'
+              )
+              || (
+                event == 'newVersion'
+                && before.status == 'DEVUELTA'
+                && after.status == 'BORRADOR'
+                && after.version == before.version + 1
+              )
+              || (
+                event == 'annul'
+                && before.status in ['BORRADOR', 'VALIDADA']
+                && after.status == 'ANULADA'
+              )
+            )
+          )
+          || (
+            superior(before)
+            && (
+              (
+                event == 'signSuperior'
+                && before.status == 'PENDIENTE_FIRMA_SUPERIOR'
+                && after.status == 'FIRMADA_POR_SUPERIOR'
+              )
+              || (
+                event == 'return'
+                && before.status == 'PENDIENTE_FIRMA_SUPERIOR'
+                && after.status == 'DEVUELTA'
+                && after.returnNote is string
+                && after.returnNote.size() > 0
+              )
+              || (
+                event == 'sendHr'
+                && before.status == 'FIRMADA_POR_SUPERIOR'
+                && after.status == 'ENVIADA_A_RRHH'
+              )
+            )
+          )
+          || (
+            role() == 'rrhh'
+            && (
+              (
+                event == 'receive'
+                && before.status == 'ENVIADA_A_RRHH'
+                && after.status == 'RECIBIDA_RRHH'
+              )
+              || (
+                event == 'finish'
+                && before.status == 'RECIBIDA_RRHH'
+                && after.status == 'FINALIZADA'
+              )
+            )
+          )
+        );
+    }
 
 
     // USUARIOS
@@ -238,6 +248,15 @@ function validTransitionEvent(id) {
       // Impide eliminar y recrear un perfil para reemplazar la cédula.
       // Bajas y correcciones excepcionales requieren un proceso de servidor.
       allow delete: if false;
+    }
+
+    // NOTIFICACIONES
+    match /users/{uid}/notifications/{notificationId} {
+      // Cada usuario puede consultar únicamente su bandeja.
+      allow read: if signed() && request.auth.uid == uid;
+
+      // La creación y los cambios de lectura los realiza el backend.
+      allow write: if false;
     }
 
     // PERIODOS ACADEMICOS
@@ -304,14 +323,24 @@ function validTransitionEvent(id) {
               )
             ) ||
 
+                        (
+              superior(resource.data)
+              && resource.data.status == 'FIRMADA_POR_SUPERIOR'
+              && request.resource.data.status == 'ENVIADA_A_RRHH'
+            )
+            ||
             (
-              staff() && (
-                (resource.data.status == 'FIRMADA_POR_SUPERIOR' &&
-                 request.resource.data.status == 'ENVIADA_A_RRHH') ||
-                (resource.data.status == 'ENVIADA_A_RRHH' &&
-                 request.resource.data.status == 'RECIBIDA_RRHH') ||
-                (resource.data.status == 'RECIBIDA_RRHH' &&
-                 request.resource.data.status == 'FINALIZADA')
+              role() == 'rrhh'
+              && (
+                (
+                  resource.data.status == 'ENVIADA_A_RRHH'
+                  && request.resource.data.status == 'RECIBIDA_RRHH'
+                )
+                ||
+                (
+                  resource.data.status == 'RECIBIDA_RRHH'
+                  && request.resource.data.status == 'FINALIZADA'
+                )
               )
             )
           )

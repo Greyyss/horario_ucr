@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'declaration_observations.dart';
+
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:cloud_firestore/cloud_firestore.dart' show Timestamp;
@@ -18,14 +20,7 @@ Future<Uint8List> buildDeclarationPdfTables({
   final lightBlue = PdfColor.fromHex('#EDF3FA');
   final line = PdfColor.fromHex('#CAD4E0');
 
-  const days = [
-    'Lunes',
-    'Martes',
-    'Miércoles',
-    'Jueves',
-    'Viernes',
-    'Sábado',
-  ];
+  const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
   const workloadHours = <String, double>{
     '1/8': 5,
@@ -72,19 +67,14 @@ Future<Uint8List> buildDeclarationPdfTables({
     return null;
   }
 
-  String signatureDate(
-    dynamic value, {
-    bool withTime = false,
-  }) {
+  String signatureDate(dynamic value, {bool withTime = false}) {
     final original = instant(value);
 
     if (original == null) {
       return 'Pendiente de firma';
     }
 
-    final costaRica = original.toUtc().subtract(
-          const Duration(hours: 6),
-        );
+    final costaRica = original.toUtc().subtract(const Duration(hours: 6));
 
     String two(int number) {
       return number.toString().padLeft(2, '0');
@@ -119,10 +109,7 @@ Future<Uint8List> buildDeclarationPdfTables({
 
     return [
       for (var i = 0; i < hash.length; i += 32)
-        hash.substring(
-          i,
-          i + 32 < hash.length ? i + 32 : hash.length,
-        ),
+        hash.substring(i, i + 32 < hash.length ? i + 32 : hash.length),
     ].join('\n');
   }
 
@@ -170,10 +157,7 @@ Future<Uint8List> buildDeclarationPdfTables({
     double size = 7.5,
   }) {
     return pw.Container(
-      padding: const pw.EdgeInsets.symmetric(
-        horizontal: 4,
-        vertical: 4,
-      ),
+      padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 4),
       color: header ? lightBlue : null,
       child: pw.Text(
         value,
@@ -189,10 +173,7 @@ Future<Uint8List> buildDeclarationPdfTables({
 
   pw.Widget heading(String title) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.only(
-        top: 9,
-        bottom: 5,
-      ),
+      padding: const pw.EdgeInsets.only(top: 9, bottom: 5),
       child: pw.Text(
         title,
         style: pw.TextStyle(
@@ -206,10 +187,7 @@ Future<Uint8List> buildDeclarationPdfTables({
 
   pw.Widget details(List<List<String>> rows) {
     return pw.Table(
-      border: pw.TableBorder.all(
-        color: line,
-        width: 0.5,
-      ),
+      border: pw.TableBorder.all(color: line, width: 0.5),
       columnWidths: {
         0: const pw.FixedColumnWidth(140),
         1: const pw.FlexColumnWidth(),
@@ -217,17 +195,14 @@ Future<Uint8List> buildDeclarationPdfTables({
       defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
       children: rows.map((row) {
         return pw.TableRow(
-          children: [
-            cell(row[0], header: true),
-            cell(row[1]),
-          ],
+          children: [cell(row[0], header: true), cell(row[1])],
         );
       }).toList(),
     );
   }
 
   // Cada día tiene De / A.
-  // El curso y la actividad se muestran debajo de esas horas.
+  // Los datos del curso y la actividad se presentan solo en observaciones.
   pw.Widget dayCell(
     String from,
     String to, {
@@ -244,12 +219,7 @@ Future<Uint8List> buildDeclarationPdfTables({
             padding: const pw.EdgeInsets.all(4),
             decoration: pw.BoxDecoration(
               color: lightBlue,
-              border: pw.Border(
-                bottom: pw.BorderSide(
-                  color: line,
-                  width: 0.5,
-                ),
-              ),
+              border: pw.Border(bottom: pw.BorderSide(color: line, width: 0.5)),
             ),
             child: pw.Text(
               dayHeading,
@@ -262,28 +232,15 @@ Future<Uint8List> buildDeclarationPdfTables({
           ),
         pw.Row(
           children: [
-            pw.Expanded(
-              child: cell(
-                from,
-                header: dayHeading != null,
-                size: 7,
-              ),
-            ),
+            pw.Expanded(child: cell(from, header: dayHeading != null, size: 7)),
             pw.Expanded(
               child: pw.Container(
                 decoration: pw.BoxDecoration(
                   border: pw.Border(
-                    left: pw.BorderSide(
-                      color: line,
-                      width: 0.5,
-                    ),
+                    left: pw.BorderSide(color: line, width: 0.5),
                   ),
                 ),
-                child: cell(
-                  to,
-                  header: dayHeading != null,
-                  size: 7,
-                ),
+                child: cell(to, header: dayHeading != null, size: 7),
               ),
             ),
           ],
@@ -291,18 +248,10 @@ Future<Uint8List> buildDeclarationPdfTables({
         if (activity.isNotEmpty)
           pw.Container(
             width: double.infinity,
-            padding: const pw.EdgeInsets.fromLTRB(
-              4,
-              0,
-              4,
-              5,
-            ),
+            padding: const pw.EdgeInsets.fromLTRB(4, 0, 4, 5),
             child: pw.Text(
               activity,
-              style: pw.TextStyle(
-                fontSize: 6.5,
-                color: blue,
-              ),
+              style: pw.TextStyle(fontSize: 6.5, color: blue),
             ),
           ),
       ],
@@ -316,21 +265,14 @@ Future<Uint8List> buildDeclarationPdfTables({
     final rows = <pw.TableRow>[
       pw.TableRow(
         repeat: true,
-        decoration: pw.BoxDecoration(
-          color: lightBlue,
-        ),
+        decoration: pw.BoxDecoration(color: lightBlue),
         children: [
           cell('Lugar de trabajo', header: true),
           cell('Cargo o categoría', header: true),
           cell('Jornada de trabajo', header: true),
           cell('Vigencia\nDesde', header: true),
           cell('Vigencia\nHasta', header: true),
-          for (final day in days)
-            dayCell(
-              'De',
-              'A',
-              dayHeading: day,
-            ),
+          for (final day in days) dayCell('De', 'A', dayHeading: day),
         ],
       ),
     ];
@@ -350,10 +292,7 @@ Future<Uint8List> buildDeclarationPdfTables({
     for (var jobIndex = 0; jobIndex < jobs.length; jobIndex++) {
       final job = jobs[jobIndex];
 
-      final byDay = List.generate(
-        6,
-        (_) => <Map<String, dynamic>>[],
-      );
+      final byDay = List.generate(6, (_) => <Map<String, dynamic>>[]);
 
       for (final block in maps(job['blocks'])) {
         final day = block['day'];
@@ -365,9 +304,7 @@ Future<Uint8List> buildDeclarationPdfTables({
 
       for (final blocks in byDay) {
         blocks.sort((a, b) {
-          return (minute(a['start']) ?? 0).compareTo(
-            minute(b['start']) ?? 0,
-          );
+          return (minute(a['start']) ?? 0).compareTo(minute(b['start']) ?? 0);
         });
       }
 
@@ -383,7 +320,7 @@ Future<Uint8List> buildDeclarationPdfTables({
           : '${hours(job['expectedHours'])} horas';
 
       // Cada bloque adicional del mismo día ocupa otra fila.
-      // Se mantiene la relación entre horario, curso y actividad.
+      // Las celdas de horario conservan únicamente las horas De / A.
       for (var slot = 0; slot < rowCount; slot++) {
         rows.add(
           pw.TableRow(
@@ -399,14 +336,8 @@ Future<Uint8List> buildDeclarationPdfTables({
                     : '${text(job['position'])} (cont.)',
               ),
               cell(slot == 0 ? load : ''),
-              cell(
-                slot == 0 ? validity(job['startDate']) : '',
-                size: 6.5,
-              ),
-              cell(
-                slot == 0 ? validity(job['endDate']) : '',
-                size: 6.5,
-              ),
+              cell(slot == 0 ? validity(job['startDate']) : '', size: 6.5),
+              cell(slot == 0 ? validity(job['endDate']) : '', size: 6.5),
               for (final blocks in byDay)
                 dayCell(
                   slot < blocks.length ? text(blocks[slot]['start']) : '',
@@ -419,10 +350,7 @@ Future<Uint8List> buildDeclarationPdfTables({
     }
 
     return pw.Table(
-      border: pw.TableBorder.all(
-        color: line,
-        width: 0.5,
-      ),
+      border: pw.TableBorder.all(color: line, width: 0.5),
       defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
       columnWidths: {
         0: const pw.FlexColumnWidth(1.5),
@@ -449,10 +377,7 @@ Future<Uint8List> buildDeclarationPdfTables({
     }
   }
 
-  pw.Widget signatureBox(
-    String label,
-    Map<String, dynamic>? signature,
-  ) {
+  pw.Widget signatureBox(String label, Map<String, dynamic>? signature) {
     return pw.Expanded(
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.center,
@@ -465,17 +390,11 @@ Future<Uint8List> buildDeclarationPdfTables({
           pw.Text(
             signature == null
                 ? ''
-                : signatureDate(
-                    signature['dateTime'],
-                    withTime: true,
-                  ),
+                : signatureDate(signature['dateTime'], withTime: true),
             style: const pw.TextStyle(fontSize: 7),
           ),
           pw.SizedBox(height: 5),
-          pw.Divider(
-            thickness: 0.5,
-            color: line,
-          ),
+          pw.Divider(thickness: 0.5, color: line),
           pw.Text(
             label,
             style: pw.TextStyle(
@@ -492,39 +411,24 @@ Future<Uint8List> buildDeclarationPdfTables({
   final internal = maps(declaration['appointments']);
   final external = maps(declaration['externalJobs']);
 
-  final observations = text(declaration['observations']).trim();
+  final observations = declarationPdfObservations(declaration);
 
   pdf.addPage(
     pw.MultiPage(
       pageFormat: PdfPageFormat.letter.landscape,
-      margin: const pw.EdgeInsets.fromLTRB(
-        24,
-        18,
-        24,
-        24,
-      ),
+      margin: const pw.EdgeInsets.fromLTRB(24, 18, 24, 24),
       maxPages: 100,
       header: (context) {
         return pw.Container(
           padding: const pw.EdgeInsets.only(bottom: 6),
           margin: const pw.EdgeInsets.only(bottom: 6),
           decoration: pw.BoxDecoration(
-            border: pw.Border(
-              bottom: pw.BorderSide(
-                color: blue,
-                width: 1,
-              ),
-            ),
+            border: pw.Border(bottom: pw.BorderSide(color: blue, width: 1)),
           ),
           child: pw.Row(
             crossAxisAlignment: pw.CrossAxisAlignment.center,
             children: [
-              pw.Image(
-                logo,
-                width: 110,
-                height: 40,
-                fit: pw.BoxFit.contain,
-              ),
+              pw.Image(logo, width: 110, height: 40, fit: pw.BoxFit.contain),
               pw.SizedBox(width: 12),
               pw.Expanded(
                 child: pw.Column(
@@ -540,9 +444,7 @@ Future<Uint8List> buildDeclarationPdfTables({
                     ),
                     pw.Text(
                       'Oficina de Recursos Humanos',
-                      style: const pw.TextStyle(
-                        fontSize: 9,
-                      ),
+                      style: const pw.TextStyle(fontSize: 9),
                     ),
                     pw.SizedBox(height: 4),
                     pw.Text(
@@ -564,17 +466,11 @@ Future<Uint8List> buildDeclarationPdfTables({
       footer: (context) {
         return pw.Column(
           children: [
-            pw.Divider(
-              thickness: 0.5,
-              color: line,
-            ),
+            pw.Divider(thickness: 0.5, color: line),
             pw.Text(
               'Registro electrónico interno académico. '
               'No equivale a firma digital certificada.',
-              style: const pw.TextStyle(
-                fontSize: 6,
-                color: PdfColors.grey700,
-              ),
+              style: const pw.TextStyle(fontSize: 6, color: PdfColors.grey700),
             ),
             pw.SizedBox(height: 4),
             pw.Row(
@@ -584,16 +480,12 @@ Future<Uint8List> buildDeclarationPdfTables({
                   'DeclaraHorario | '
                   'Período ${text(declaration['periodId'])} | '
                   'Versión ${text(declaration['version'])}',
-                  style: const pw.TextStyle(
-                    fontSize: 6,
-                  ),
+                  style: const pw.TextStyle(fontSize: 6),
                 ),
                 pw.Text(
                   'Página ${context.pageNumber} '
                   'de ${context.pagesCount}',
-                  style: const pw.TextStyle(
-                    fontSize: 6,
-                  ),
+                  style: const pw.TextStyle(fontSize: 6),
                 ),
               ],
             ),
@@ -602,10 +494,7 @@ Future<Uint8List> buildDeclarationPdfTables({
       },
       build: (context) => [
         pw.Table(
-          border: pw.TableBorder.all(
-            color: line,
-            width: 0.5,
-          ),
+          border: pw.TableBorder.all(color: line, width: 0.5),
           children: [
             pw.TableRow(
               children: [
@@ -649,51 +538,31 @@ Future<Uint8List> buildDeclarationPdfTables({
           'UNIVERSIDAD DE COSTA RICA '
           '(sea como docente y/o administrativo)',
         ),
-        scheduleTable(
-          internal,
-          internal: true,
-        ),
+        scheduleTable(internal, internal: true),
         heading(
           'OTRAS INSTITUCIONES PÚBLICAS, '
           'PRIVADAS Y FUNDACIONES',
         ),
-        scheduleTable(
-          external,
-          internal: false,
-        ),
+        scheduleTable(external, internal: false),
         pw.SizedBox(height: 7),
         pw.Text(
           'Horas institucionales: '
           '${totalHours(internal).toStringAsFixed(2)} | '
           'Horas externas: '
           '${totalHours(external).toStringAsFixed(2)}',
-          style: const pw.TextStyle(
-            fontSize: 7,
-          ),
+          style: const pw.TextStyle(fontSize: 7),
         ),
         heading('OBSERVACIONES'),
 
-        // Presenta las observaciones guardadas.
-        // No las vuelve a generar al abrir el PDF.
+        // DEVUELTA presenta el motivo del superior.
+        // Los demás estados presentan el resumen de horarios.
         // Cada párrafo puede continuar en otra página.
         pw.Table(
           border: pw.TableBorder(
-            top: pw.BorderSide(
-              color: line,
-              width: 0.5,
-            ),
-            bottom: pw.BorderSide(
-              color: line,
-              width: 0.5,
-            ),
-            left: pw.BorderSide(
-              color: line,
-              width: 0.5,
-            ),
-            right: pw.BorderSide(
-              color: line,
-              width: 0.5,
-            ),
+            top: pw.BorderSide(color: line, width: 0.5),
+            bottom: pw.BorderSide(color: line, width: 0.5),
+            left: pw.BorderSide(color: line, width: 0.5),
+            right: pw.BorderSide(color: line, width: 0.5),
           ),
           children: [
             for (final paragraph
@@ -708,9 +577,7 @@ Future<Uint8List> buildDeclarationPdfTables({
                     ),
                     child: pw.Text(
                       paragraph.isEmpty ? ' ' : paragraph,
-                      style: const pw.TextStyle(
-                        fontSize: 8,
-                      ),
+                      style: const pw.TextStyle(fontSize: 8),
                     ),
                   ),
                 ],
@@ -726,23 +593,15 @@ Future<Uint8List> buildDeclarationPdfTables({
           'y nacional vigentes, que se refieren a la declaración '
           'falsa u omisa de las jornadas y horarios laborales '
           'aquí consignados.',
-          style: const pw.TextStyle(
-            fontSize: 8,
-          ),
+          style: const pw.TextStyle(fontSize: 8),
         ),
         pw.SizedBox(height: 12),
         pw.Row(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            signatureBox(
-              'Firma del Funcionario(a) Declarante',
-              ownerSignature,
-            ),
+            signatureBox('Firma del Funcionario(a) Declarante', ownerSignature),
             pw.SizedBox(width: 28),
-            signatureBox(
-              'Superior Jerárquico Unidad',
-              superiorSignature,
-            ),
+            signatureBox('Superior Jerárquico Unidad', superiorSignature),
           ],
         ),
         if (signatures.isNotEmpty) ...[
@@ -754,9 +613,7 @@ Future<Uint8List> buildDeclarationPdfTables({
           pw.Text(
             'Detalle de las firmas correspondientes '
             'a esta versión de la declaración.',
-            style: const pw.TextStyle(
-              fontSize: 8,
-            ),
+            style: const pw.TextStyle(fontSize: 8),
           ),
           for (final signature in signatures) ...[
             pw.SizedBox(height: 12),
@@ -769,21 +626,12 @@ Future<Uint8List> buildDeclarationPdfTables({
                         ? 'Superior'
                         : text(signature['type']),
               ],
-              [
-                'Nombre',
-                text(signature['name']),
-              ],
+              ['Nombre', text(signature['name'])],
               [
                 'Fecha y hora de firma',
-                signatureDate(
-                  signature['dateTime'],
-                  withTime: true,
-                ),
+                signatureDate(signature['dateTime'], withTime: true),
               ],
-              [
-                'Huella SHA-256',
-                wrappedHash(signature['hash']),
-              ],
+              ['Huella SHA-256', wrappedHash(signature['hash'])],
             ]),
           ],
         ],

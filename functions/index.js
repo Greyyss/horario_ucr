@@ -7,6 +7,7 @@ const { createHash } = require("node:crypto");
 
 initializeApp();
 Object.assign(exports, require("./declaration-callables"));
+Object.assign(exports, require("./notification-triggers"));
 
 const db = getFirestore();
 const bucket = getStorage().bucket(

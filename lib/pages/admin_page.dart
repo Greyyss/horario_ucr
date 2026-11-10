@@ -119,15 +119,19 @@ class AdminPage extends StatelessWidget {
                       trailing: DropdownButton<String>(
                         value: roles.contains(currentRole) ? currentRole : null,
                         hint: const Text('Rol'),
-                        items: roles.map((role) => DropdownMenuItem(
-                          value: role,
-                          child: Text(role),
-                        )).toList(),
-                        onChanged: isSelf ? null : (role) async {
-                          if (role != null && role != currentRole) {
-                            await changeRole(context, doc.id, role);
-                          }
-                        },
+                        items: roles
+                            .map((role) => DropdownMenuItem(
+                                  value: role,
+                                  child: Text(role),
+                                ))
+                            .toList(),
+                        onChanged: isSelf
+                            ? null
+                            : (role) async {
+                                if (role != null && role != currentRole) {
+                                  await changeRole(context, doc.id, role);
+                                }
+                              },
                       ),
                     ),
                   );
@@ -139,7 +143,8 @@ class AdminPage extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text('Períodos', style: Theme.of(context).textTheme.titleLarge),
+                child: Text('Períodos',
+                    style: Theme.of(context).textTheme.titleLarge),
               ),
               FilledButton.icon(
                 onPressed: () => addPeriod(context),

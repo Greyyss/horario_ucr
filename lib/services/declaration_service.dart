@@ -11,6 +11,7 @@ import 'personal_data_validator.dart';
 import '../models/declaration.dart';
 import 'validation_service.dart';
 import 'declaration_pdf_layout.dart';
+import 'declaration_observations.dart';
 
 import 'package:cloud_functions/cloud_functions.dart';
 
@@ -71,6 +72,12 @@ class DeclarationService {
       throw StateError('Solo se pueden guardar borradores.');
     }
     PersonalDataValidator.ensureValid(declaration);
+    final summary = declaration.observations.trim().isNotEmpty
+        ? declaration.observations
+        : generateDeclarationSummary(declaration.toMap());
+    if (summary.length > 2000) {
+      throw StateError('El resumen supera el máximo de 2000 caracteres.');
+    }
     final callable = FirebaseFunctions.instanceFor(region: 'us-east1')
         .httpsCallable('saveDeclarationValidated');
     try {
@@ -84,7 +91,7 @@ class DeclarationService {
         'phone': declaration.phone,
         'email': declaration.email,
         'unit': declaration.unit,
-        'observations': declaration.observations,
+        'observations': summary,
         'appointments':
             declaration.appointments.map((job) => job.toMap()).toList(),
         'externalJobs':
@@ -370,37 +377,51 @@ class DeclarationService {
   // ==========================================================
 
   Future<Uint8List> _buildPdf(Declaration declaration) async {
-    final version = await declarations
-        .doc(declaration.id)
-        .collection('versions')
-        .doc('${declaration.version}')
-        .get();
+    final reference = declarations.doc(declaration.id);
 
-    final signatures = await declarations
-        .doc(declaration.id)
-        .collection('versions')
-        .doc('${declaration.version}')
-        .collection('signatures')
-        .get();
-
-    if (!version.exists) {
-      throw StateError(
-        'No se encontró la versión guardada de esta declaración.',
+    // Leer en una misma transacción el contenido de la versión,
+    // el estado actual, el motivo de devolución y las dos firmas.
+    final source = await db.runTransaction((transaction) async {
+      final current = await transaction.get(reference);
+      if (!current.exists) {
+        throw StateError('La declaración ya no existe.');
+      }
+      if (current.data()?['version'] != declaration.version) {
+        throw StateError('La declaración cambió de versión. Volvé a abrirla.');
+      }
+      final versionRef =
+          reference.collection('versions').doc('${declaration.version}');
+      final version = await transaction.get(versionRef);
+      if (!version.exists) {
+        throw StateError(
+          'No se encontró la versión guardada de esta declaración.',
+        );
+      }
+      final owner = await transaction.get(
+        versionRef.collection('signatures').doc('owner'),
       );
-    }
+      final superior = await transaction.get(
+        versionRef.collection('signatures').doc('superior'),
+      );
+      return (
+        current: current,
+        version: version,
+        signatures: [owner, superior].where((doc) => doc.exists).toList(),
+      );
+    });
 
-    final saved = Declaration.fromDoc(version);
+    final current = Declaration.fromDoc(source.current);
+    final saved = Declaration.fromDoc(source.version);
+    final signatures = source.signatures;
 
-    if (saved.version != declaration.version ||
-        saved.ownerId != declaration.ownerId ||
-        saved.superiorId != declaration.superiorId) {
+    if (saved.version != current.version ||
+        saved.ownerId != current.ownerId ||
+        saved.superiorId != current.superiorId) {
       throw StateError('La versión guardada no coincide con la declaración.');
     }
 
-    // Conservar el identificador y el estado del trámite.
-    // Tomar el contenido desde la versión guardada.
     declaration = Declaration(
-      id: declaration.id,
+      id: current.id,
       ownerId: saved.ownerId,
       ownerName: saved.ownerName,
       identification: saved.identification,
@@ -409,19 +430,18 @@ class DeclarationService {
       unit: saved.unit,
       periodId: saved.periodId,
       superiorId: saved.superiorId,
-      status: declaration.status,
+      status: current.status,
       observations: saved.observations,
+      returnNote: current.returnNote,
       version: saved.version,
       appointments: saved.appointments,
       externalJobs: saved.externalJobs,
-      updatedAt: saved.updatedAt,
+      updatedAt: current.updatedAt,
     );
 
     // Un PDF definitivo necesita las dos firmas de esa versión.
     if (declaration.status == 'FINALIZADA') {
-      final signaturesById = {
-        for (final doc in signatures.docs) doc.id: doc.data(),
-      };
+      final signaturesById = {for (final doc in signatures) doc.id: doc.data()};
 
       final ownerSignature = signaturesById['owner'];
       final superiorSignature = signaturesById['superior'];
@@ -439,8 +459,8 @@ class DeclarationService {
     final logoData = await rootBundle.load('assets/images/logo_ucr.png');
     return buildDeclarationPdfTables(
       declaration: declaration.toMap(),
-      signatures: signatures.docs.map((signature) {
-        final data = signature.data();
+      signatures: signatures.map((signature) {
+        final data = signature.data()!;
         return <String, dynamic>{
           ...data,
           'type': signature.id,

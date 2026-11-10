@@ -1,6 +1,3 @@
-import 'dart:async';
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -12,11 +9,12 @@ import '../services/declaration_service.dart';
 import '../services/validation_service.dart';
 import '../services/personal_data_validator.dart';
 import '../services/profile_service.dart';
-import '../services/websocket_service.dart';
+import 'notification_bell.dart';
 
 import 'admin_page.dart';
 import 'personal_profile_page.dart';
 import 'superior_selector.dart';
+import 'declaration_views.dart' as declaration_views;
 
 const days = [
   '',
@@ -36,13 +34,8 @@ class Dashboard extends StatefulWidget {
 }
 
 class _DashboardState extends State<Dashboard> {
-  StreamSubscription<dynamic>? _socketSubscription;
-
-  final List<({String message, DateTime receivedAt, bool read})> _notices = [];
-
   final service = DeclarationService();
   final Set<String> _pdfBusy = {};
-  final webSocketService = WebSocketService();
 
   String role = 'declarante';
   Map<String, dynamic> profile = {};
@@ -52,202 +45,32 @@ class _DashboardState extends State<Dashboard> {
   String _statusFilter = 'TODOS';
   bool _newestFirst = true;
   String _section = 'inicio';
-
-  int get _unreadCount => _notices.where((notice) => !notice.read).length;
+  bool _sidebarExpanded = true;
 
   @override
   void initState() {
     super.initState();
     load();
-    connectWebSocket();
-  }
-
-  @override
-  void dispose() {
-    _socketSubscription?.cancel();
-    webSocketService.disconnect();
-    super.dispose();
-  }
-
-  void _openNotifications() {
-    setState(() {
-      for (var i = 0; i < _notices.length; i++) {
-        final notice = _notices[i];
-
-        _notices[i] = (
-          message: notice.message,
-          receivedAt: notice.receivedAt,
-          read: true,
-        );
-      }
-    });
-
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(
-              Icons.notifications_outlined,
-              color: UcrColors.blue,
-            ),
-            SizedBox(width: 10),
-            Text('Notificaciones'),
-          ],
-        ),
-        content: SizedBox(
-          width: 420,
-          child: _notices.isEmpty
-              ? const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 28),
-                  child: Text(
-                    'Todavía no recibiste notificaciones en esta sesión.',
-                  ),
-                )
-              : ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 380),
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    itemCount: _notices.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final notice = _notices[index];
-                      final time = notice.receivedAt;
-
-                      final dateText = '${time.day.toString().padLeft(2, '0')}/'
-                          '${time.month.toString().padLeft(2, '0')}/'
-                          '${time.year}  '
-                          '${time.hour.toString().padLeft(2, '0')}:'
-                          '${time.minute.toString().padLeft(2, '0')}';
-
-                      return ListTile(
-                        contentPadding: const EdgeInsets.symmetric(vertical: 5),
-                        leading: const Icon(
-                          Icons.info_outline,
-                          color: UcrColors.blue,
-                        ),
-                        title: Text(notice.message),
-                        subtitle: Text(dateText),
-                      );
-                    },
-                  ),
-                ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cerrar'),
-          ),
-        ],
-      ),
-    );
   }
 
   Widget _notificationBell() {
-    return IconButton(
-      tooltip:
-          'Notificaciones${_unreadCount > 0 ? ' ($_unreadCount nuevas)' : ''}',
-      onPressed: _openNotifications,
-      icon: Badge(
-        isLabelVisible: _unreadCount > 0,
-        label: Text(
-          _unreadCount > 99 ? '99+' : '$_unreadCount',
-        ),
-        child: const Icon(Icons.notifications_outlined),
-      ),
+    return NotificationBell(
+      onOpenDeclaration: _openDeclarationFromNotification,
     );
   }
 
-  Future<void> connectWebSocket() async {
-    try {
-      await webSocketService.connect();
-
-      if (!mounted) return;
-
-      _socketSubscription = webSocketService.messages?.listen(
-        (message) {
-          if (!mounted) return;
-
-          try {
-            final data = jsonDecode(message.toString());
-
-            if (data is! Map<String, dynamic>) return;
-
-            debugPrint(
-              'Mensaje WebSocket recibido: ${data['type']}',
-            );
-
-            final type = data['type'];
-            final text = data['message'];
-
-            if (type == 'authenticated') {
-              debugPrint(
-                'Firebase autenticó correctamente al usuario',
-              );
-
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'WebSocket autenticado correctamente',
-                  ),
-                ),
-              );
-
-              return;
-            }
-
-            if (type == 'ready') {
-              debugPrint(
-                'Sistema de notificaciones preparado',
-              );
-              return;
-            }
-
-            if (type == 'notification') {
-              final notificationText = text?.toString() ?? 'Nueva notificación';
-
-              setState(() {
-                _notices.insert(
-                  0,
-                  (
-                    message: notificationText,
-                    receivedAt: DateTime.now(),
-                    read: false,
-                  ),
-                );
-
-                if (_notices.length > 100) {
-                  _notices.removeLast();
-                }
-              });
-
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(notificationText),
-                  duration: const Duration(seconds: 6),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-
-              return;
-            }
-
-            debugPrint(
-              'Mensaje WebSocket recibido: $type',
-            );
-          } catch (e) {
-            debugPrint(
-              'Error al leer notificación: $e',
-            );
-          }
-        },
-        onError: (error) {
-          debugPrint('Error en WebSocket: $error');
-        },
-      );
-    } catch (e) {
-      debugPrint('Error al conectar WebSocket: $e');
-    }
+  void _openDeclarationFromNotification(String id) {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => declaration_views.DeclarationDetailPage(
+          id: id,
+          actionsBuilder: (declaration) => _actionsFor(
+            declaration,
+            FirebaseAuth.instance.currentUser?.uid ?? '',
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> load() async {
@@ -654,7 +477,7 @@ class _DashboardState extends State<Dashboard> {
             'Crear nueva versión',
             primary: true,
           ),
-        if ((role == 'superior' || role == 'admin') &&
+        if (role == 'superior' &&
             d.superiorId == uid &&
             d.status == 'PENDIENTE_FIRMA_SUPERIOR') ...[
           _action(
@@ -663,9 +486,14 @@ class _DashboardState extends State<Dashboard> {
             'Aprobar y firmar',
             primary: true,
           ),
-          _action(d, 'return', 'Devolver'),
+          _action(
+            d,
+            'return',
+            'Devolver',
+          ),
         ],
-        if ((role == 'rrhh' || role == 'admin') &&
+        if (role == 'superior' &&
+            d.superiorId == uid &&
             d.status == 'FIRMADA_POR_SUPERIOR')
           _action(
             d,
@@ -673,14 +501,14 @@ class _DashboardState extends State<Dashboard> {
             'Enviar a RRHH',
             primary: true,
           ),
-        if ((role == 'rrhh' || role == 'admin') && d.status == 'ENVIADA_A_RRHH')
+        if (role == 'rrhh' && d.status == 'ENVIADA_A_RRHH')
           _action(
             d,
             'receive',
             'Recibir',
             primary: true,
           ),
-        if ((role == 'rrhh' || role == 'admin') && d.status == 'RECIBIDA_RRHH')
+        if (role == 'rrhh' && d.status == 'RECIBIDA_RRHH')
           _action(
             d,
             'finish',
@@ -1401,7 +1229,7 @@ class _DashboardState extends State<Dashboard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'B I E N V E N I D A',
+                      'B I E N V E N I D O (A)',
                       style: TextStyle(
                         color: Color(0xFF496E9E),
                         fontSize: 13,
@@ -1467,35 +1295,49 @@ class _DashboardState extends State<Dashboard> {
         horizontal: 12,
         vertical: 3,
       ),
-      child: Material(
-        color: selected ? const Color(0xFF0B70C2) : Colors.transparent,
-        borderRadius: BorderRadius.circular(9),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(9),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 15,
-              vertical: 14,
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  icon,
-                  color: Colors.white,
-                  size: 23,
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
+      child: Tooltip(
+        message: label,
+        child: Semantics(
+          selected: selected,
+          child: Material(
+            color: selected ? const Color(0xFF0B70C2) : Colors.transparent,
+            borderRadius: BorderRadius.circular(9),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(9),
+              hoverColor: Colors.white.withValues(alpha: 0.08),
+              onTap: onTap,
+              child: SizedBox(
+                height: 52,
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 56,
+                      child: Icon(
+                        icon,
+                        color: Colors.white,
+                        size: 23,
+                      ),
                     ),
-                  ),
+                    if (_sidebarExpanded)
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 12),
+                          child: Text(
+                            label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight:
+                                  selected ? FontWeight.w600 : FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
@@ -1504,8 +1346,12 @@ class _DashboardState extends State<Dashboard> {
   }
 
   Widget _sidebar(List<Declaration> list) {
-    return Container(
-      width: 232,
+    final sidebarWidth = _sidebarExpanded ? 232.0 : 80.0;
+
+    return AnimatedContainer(
+      width: sidebarWidth,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOutCubic,
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -1516,78 +1362,154 @@ class _DashboardState extends State<Dashboard> {
           ],
         ),
       ),
-      child: Column(
-        children: [
-          const SizedBox(height: 20),
-          _sideItem(
-            'Inicio',
-            Icons.home_outlined,
-            () => setState(() => _section = 'inicio'),
-            selected: _section == 'inicio',
-          ),
-          if (role == 'declarante')
-            _sideItem(
-              'Nueva declaración',
-              Icons.note_add_outlined,
-              () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const EditorPage(),
+      child: ClipRect(
+        // Evita desbordamientos del texto durante la animación.
+        child: OverflowBox(
+          alignment: Alignment.topLeft,
+          minWidth: sidebarWidth,
+          maxWidth: sidebarWidth,
+          child: SizedBox(
+            width: sidebarWidth,
+            child: Column(
+              children: [
+                const SizedBox(height: 8),
+
+                // Botón para contraer o expandir.
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 56,
+                        height: 48,
+                        child: IconButton(
+                          tooltip: _sidebarExpanded
+                              ? 'Contraer menú'
+                              : 'Expandir menú',
+                          onPressed: () {
+                            setState(() {
+                              _sidebarExpanded = !_sidebarExpanded;
+                            });
+                          },
+                          icon: Icon(
+                            _sidebarExpanded
+                                ? Icons.chevron_left_rounded
+                                : Icons.chevron_right_rounded,
+                            color: Colors.white,
+                            size: 28,
+                          ),
+                        ),
+                      ),
+                      if (_sidebarExpanded)
+                        const Expanded(
+                          child: Text(
+                            'Menú',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-            ),
-          _sideItem(
-            role == 'declarante' ? 'Mis declaraciones' : 'Declaraciones',
-            Icons.description_outlined,
-            () => setState(
-              () => _section = 'declaraciones',
-            ),
-            selected: _section == 'declaraciones',
-          ),
-          _sideItem(
-            'Seguimiento',
-            Icons.bar_chart_outlined,
-            () => _chooseHistory(list),
-          ),
-          if (role == 'admin')
-            _sideItem(
-              'Administración',
-              Icons.admin_panel_settings_outlined,
-              () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => const AdminPage(),
+                const SizedBox(height: 8),
+
+                // Opciones de navegación.
+                Expanded(
+                  child: ListView(
+                    padding: EdgeInsets.zero,
+                    children: [
+                      _sideItem(
+                        'Inicio',
+                        Icons.home_outlined,
+                        () => setState(() => _section = 'inicio'),
+                        selected: _section == 'inicio',
+                      ),
+                      if (role == 'declarante')
+                        _sideItem(
+                          'Nueva declaración',
+                          Icons.note_add_outlined,
+                          () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const EditorPage(),
+                            ),
+                          ),
+                        ),
+                      _sideItem(
+                        role == 'declarante'
+                            ? 'Mis declaraciones'
+                            : 'Declaraciones',
+                        Icons.description_outlined,
+                        () => setState(
+                          () => _section = 'declaraciones',
+                        ),
+                        selected: _section == 'declaraciones',
+                      ),
+                      _sideItem(
+                        'Seguimiento',
+                        Icons.bar_chart_outlined,
+                        () => _chooseHistory(list),
+                      ),
+                      if (role == 'admin')
+                        _sideItem(
+                          'Administración',
+                          Icons.admin_panel_settings_outlined,
+                          () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const AdminPage(),
+                            ),
+                          ),
+                        ),
+                      const Divider(
+                        color: Color(0xFF3978AE),
+                        indent: 22,
+                        endIndent: 22,
+                      ),
+                      _sideItem(
+                        'Ayuda',
+                        Icons.help_outline,
+                        _help,
+                      ),
+                      _sideItem(
+                        'Cerrar sesión',
+                        Icons.logout,
+                        () => FirebaseAuth.instance.signOut(),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ),
-          const Divider(
-            color: Color(0xFF3978AE),
-            indent: 22,
-            endIndent: 22,
-          ),
-          _sideItem(
-            'Ayuda',
-            Icons.help_outline,
-            _help,
-          ),
-          _sideItem(
-            'Cerrar sesión',
-            Icons.logout,
-            () => FirebaseAuth.instance.signOut(),
-          ),
-          const Spacer(),
-          const Padding(
-            padding: EdgeInsets.all(20),
-            child: Text(
-              'Universidad de Costa Rica',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-              ),
+
+                // Pie de la barra lateral.
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: _sidebarExpanded
+                      ? const Text(
+                          'Universidad de Costa Rica',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                          ),
+                        )
+                      : const Tooltip(
+                          message: 'Universidad de Costa Rica',
+                          child: Icon(
+                            Icons.account_balance_outlined,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                        ),
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
@@ -1606,62 +1528,22 @@ class _DashboardState extends State<Dashboard> {
       return;
     }
 
-    if (list.length == 1) {
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => TimelinePage(
-            id: list.first.id,
-          ),
-        ),
-      );
-      return;
-    }
+    final selected = list.length == 1
+        ? list.first.id
+        : await showDialog<String>(
+            context: context,
+            builder: (_) => declaration_views.DeclarationHistoryPicker(
+              declarations: list,
+            ),
+          );
 
-    final selected = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Seleccione una declaración'),
-        content: SizedBox(
-          width: 480,
-          height: 350,
-          child: ListView.builder(
-            itemCount: list.length,
-            itemBuilder: (_, i) {
-              final d = list[i];
+    if (selected == null || !mounted) return;
 
-              return ListTile(
-                leading: const Icon(
-                  Icons.history,
-                  color: UcrColors.blue,
-                ),
-                title: Text(d.ownerName),
-                subtitle: Text(
-                  '${d.periodId} · Versión ${d.version} · '
-                  '${_statusLabel(d.status)}',
-                ),
-                onTap: () => Navigator.pop(ctx, d.id),
-              );
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancelar'),
-          ),
-        ],
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => TimelinePage(id: selected),
       ),
     );
-
-    if (selected != null && mounted) {
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => TimelinePage(id: selected),
-        ),
-      );
-    }
   }
 
   @override
@@ -4354,54 +4236,13 @@ class TimelinePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: UcrColors.background,
-      appBar: AppBar(
-        backgroundColor: UcrColors.blue,
-        foregroundColor: Colors.white,
-        title: const Text('Historial y auditoría'),
-      ),
-      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-        stream: DeclarationService().timeline(id),
-        builder: (ctx, s) {
-          if (s.hasError) {
-            return Center(
-              child: Text('${s.error}'),
-            );
-          }
-
-          if (!s.hasData) {
-            return const Center(
-              child: CircularProgressIndicator(),
-            );
-          }
-
-          return ListView(
-            children: s.data!.docs.map((doc) {
-              final d = doc.data();
-
-              return ListTile(
-                leading: const Icon(Icons.history),
-                title: Text(
-                  '${d['event']} · v${d['version']}',
-                ),
-                subtitle: Text(
-                  '${d['previousStatus']} → ${d['newStatus']}\n'
-                  '${d['observation'] ?? ''}\n'
-                  'Usuario: ${d['userId']}',
-                ),
-                isThreeLine: true,
-              );
-            }).toList(),
-          );
-        },
-      ),
+    return declaration_views.DeclarationHistoryPage(
+      id: id,
     );
   }
 }
 
 class _WelcomeCurvePainter extends CustomPainter {
-  
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width;
