@@ -1,0 +1,520 @@
+﻿{
+    "generatedAt":  "2026-10-22T03:29:04.8523759Z",
+    "exitCode":  0,
+    "passed":  64,
+    "failed":  0,
+    "tests":  [
+                  {
+                      "name":  "N01: nombramiento completo y cuatro horas validas",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "N02: debe existir al menos un nombramiento institucional",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "N03: trabajo externo no sustituye nombramiento institucional",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "N04: institucion vacia o espacios 0",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "N04: institucion vacia o espacios 3",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "N05: puesto vacio o espacios 0",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "N05: puesto vacio o espacios 3",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "N06: nombramiento sin bloques",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "N07: jornada negativa rechazada",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "N08: jornada cero rechazada",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "N09: jornada NaN rechazada",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "N10: jornada infinita rechazada",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "N11: jornada externa cero rechazada aunque no sume al total UCR",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "N12: jornada externa negativa rechazada",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "N13: jornada externa NaN rechazada",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "N14: jornada externa infinita rechazada",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "F01: fechas iguales son validas",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "F02: fin anterior al inicio",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "F03: fecha inicial vacia",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "F04: fecha final vacia",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "F05: fecha inicial en texto libre",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "F06: fecha final en texto libre",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "F07: No aplica permite omitir el fin",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "F08: No aplica tolera espacios y mayusculas",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "F09: No aplica no elimina la obligacion de fecha inicial",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "F10: 29 febrero en anio bisiesto permitido",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "F11: 29 febrero en anio no bisiesto rechazado",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "F12: 31 abril rechazado",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "F13: mes 13 rechazado",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "F14: fecha final inexistente rechazada",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H01: parseo de medianoche y limite superior",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H02: hora invalida \"24:00\"",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H02: hora invalida \"12:60\"",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H02: hora invalida \"-1:00\"",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H02: hora invalida \"ab:cd\"",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H02: hora invalida \"0800\"",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H02: hora invalida \"08:00:00\"",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H02: hora invalida \"\"",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H03: dia fuera de lunes a sabado 0",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H03: dia fuera de lunes a sabado 7",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H04: sabado permitido",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H05: inicio y fin iguales rechazados",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H06: fin anterior rechazado",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H07: formato invalido produce error sin lanzar excepcion",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H08: finalizar exactamente al mediodia permitido",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H09: iniciar exactamente a las 13 permitido",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H10: invasion de almuerzo 11:59-12:01",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H10: invasion de almuerzo 12:00-13:00",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H10: invasion de almuerzo 12:59-13:01",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H11: bloques contiguos no se traslapan",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H12: traslape parcial interno",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H13: bloque anidado dentro de otro",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H14: duplicado exacto de bloque",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H15: traslape entre nombramientos institucionales",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H16: traslape institucional con externo",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H17: traslape entre dos externos",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H18: mismas horas en dias diferentes permitidas",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H19: exactamente diez horas diarias permitidas",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H20: diez horas y un minuto rechazados",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H21: maximo diario incluye trabajos externos",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H22: menos horas de las esperadas rechazado",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H23: mas horas de las esperadas rechazado",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H24: trabajo externo no completa jornada institucional faltante",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "H25: calculo de fracciones y total externo separado",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  }
+              ]
+}

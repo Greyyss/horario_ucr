@@ -1,0 +1,232 @@
+﻿{
+    "generatedAt":  "2026-10-22T03:44:12.6234541Z",
+    "exitCode":  0,
+    "passed":  28,
+    "failed":  0,
+    "tests":  [
+                  {
+                      "name":  "W01: crear nombramiento valido devuelve los datos y recorta espacios",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "W02: editar nombramiento permite guardar un puesto nuevo",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "W03: bloquea \"Lugar de trabajo / instituci├│n\" vacio o espacios (0)",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "W03: bloquea \"Lugar de trabajo / instituci├│n\" vacio o espacios (3)",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "W03: bloquea \"Cargo o categor├¡a\" vacio o espacios (0)",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "W03: bloquea \"Cargo o categor├¡a\" vacio o espacios (3)",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "W04: bloquea jornada \"\" al pulsar Guardar",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "W04: bloquea jornada \"abc\" al pulsar Guardar",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "W04: bloquea jornada \"0\" al pulsar Guardar",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "W04: bloquea jornada \"-2\" al pulsar Guardar",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "W04: bloquea jornada \"NaN\" al pulsar Guardar",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "W04: bloquea jornada \"Infinity\" al pulsar Guardar",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "W04: bloquea jornada \"-Infinity\" al pulsar Guardar",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "W05: bloquea formulario sin bloques horarios",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "W06: bloquea fecha inicial antigua invalida \"\"",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "W06: bloquea fecha inicial antigua invalida \"2026-02-29\"",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "W06: bloquea fecha inicial antigua invalida \"2026-04-31\"",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "W06: bloquea fecha inicial antigua invalida \"2025-13-01\"",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "W07: bloquea fecha final antigua inexistente",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "W08: bloquea fin anterior a inicio",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "W09: permite inicio y fin iguales",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "W10: No aplica deshabilita fecha final y permite guardar",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "W11: desmarcar No aplica exige volver a elegir fin",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "W12: No aplica no permite inicio invalido",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "W13: eliminar ultimo bloque impide guardar",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "W14: despues de un error se puede corregir y guardar",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "W15: formulario nuevo completamente vacio no se cierra",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  },
+                  {
+                      "name":  "W16: cancelar no devuelve un nombramiento",
+                      "result":  "success",
+                      "skipped":  false,
+                      "errors":  [
+
+                                 ]
+                  }
+              ]
+}

@@ -1,0 +1,183 @@
+{
+  "projectId": "demo-declaraucr-backend",
+  "passed": 44,
+  "failed": 0,
+  "results": [
+    {
+      "name": "Servidor rechaza sesion ausente",
+      "pass": true
+    },
+    {
+      "name": "Servidor rechaza ownerId enviado por cliente",
+      "pass": true
+    },
+    {
+      "name": "Servidor rechaza estado enviado por cliente",
+      "pass": true
+    },
+    {
+      "name": "Servidor rechaza telefono con letras",
+      "pass": true
+    },
+    {
+      "name": "Servidor rechaza fecha inexistente",
+      "pass": true
+    },
+    {
+      "name": "Servidor rechaza jornada cero",
+      "pass": true
+    },
+    {
+      "name": "Servidor rechaza jornada externa negativa",
+      "pass": true
+    },
+    {
+      "name": "Servidor rechaza dia invalido",
+      "pass": true
+    },
+    {
+      "name": "Servidor rechaza ultimo nombramiento invalido",
+      "pass": true
+    },
+    {
+      "name": "Servidor rechaza sin nombramientos",
+      "pass": true
+    },
+    {
+      "name": "Rechazos no crean documentos ni historial",
+      "pass": true
+    },
+    {
+      "name": "Servidor crea padre, version y evento",
+      "pass": true
+    },
+    {
+      "name": "Servidor detecta guardado sin cambios",
+      "pass": true
+    },
+    {
+      "name": "Servidor impide editar declaracion ajena",
+      "pass": true
+    },
+    {
+      "name": "Servidor impide cambiar periodo",
+      "pass": true
+    },
+    {
+      "name": "Servidor impide cambiar superior",
+      "pass": true
+    },
+    {
+      "name": "Servidor conserva version frente a editor desactualizado",
+      "pass": true
+    },
+    {
+      "name": "Servidor edita sin borrar devolucion ni createdAt",
+      "pass": true
+    },
+    {
+      "name": "Reglas bloquean crear directamente desde SDK",
+      "pass": true
+    },
+    {
+      "name": "Reglas bloquean editar contenido directamente",
+      "pass": true
+    },
+    {
+      "name": "Reglas bloquean adulterar version directamente",
+      "pass": true
+    },
+    {
+      "name": "Reglas bloquean crear version directamente",
+      "pass": true
+    },
+    {
+      "name": "Reglas bloquean falsificar MODIFICADA",
+      "pass": true
+    },
+    {
+      "name": "Reglas bloquean pasar a VALIDADA directamente",
+      "pass": true
+    },
+    {
+      "name": "Otro declarante no puede leer",
+      "pass": true
+    },
+    {
+      "name": "Superior asignado conserva lectura",
+      "pass": true
+    },
+    {
+      "name": "RRHH conserva lectura",
+      "pass": true
+    },
+    {
+      "name": "No se puede validar declaracion ajena",
+      "pass": true
+    },
+    {
+      "name": "Validacion servidor usa documento almacenado",
+      "pass": true
+    },
+    {
+      "name": "Flujo conserva submit",
+      "pass": true
+    },
+    {
+      "name": "Flujo conserva signOwner",
+      "pass": true
+    },
+    {
+      "name": "Flujo conserva route",
+      "pass": true
+    },
+    {
+      "name": "Flujo conserva signSuperior",
+      "pass": true
+    },
+    {
+      "name": "Flujo conserva sendHr",
+      "pass": true
+    },
+    {
+      "name": "Flujo conserva receive",
+      "pass": true
+    },
+    {
+      "name": "Flujo conserva finish",
+      "pass": true
+    },
+    {
+      "name": "Servidor no edita declaracion finalizada",
+      "pass": true
+    },
+    {
+      "name": "Borrador permite corregir almuerzo pero validar lo rechaza",
+      "pass": true
+    },
+    {
+      "name": "Borrador permite corregir traslape pero validar lo rechaza",
+      "pass": true
+    },
+    {
+      "name": "Borrador permite corregir total distinto pero validar lo rechaza",
+      "pass": true
+    },
+    {
+      "name": "Borrador permite corregir maximo diario pero validar lo rechaza",
+      "pass": true
+    },
+    {
+      "name": "Reglas bloquean falsificar nueva version",
+      "pass": true
+    },
+    {
+      "name": "PDF artifact sigue reservado al servidor",
+      "pass": true
+    },
+    {
+      "name": "Devolucion y nueva version conservan el flujo",
+      "pass": true
+    }
+  ]
+}

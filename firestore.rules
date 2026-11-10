@@ -66,35 +66,23 @@ function validInitialProfile(data) {
     );
 }
 
+// La cédula solo puede pasar de vacía/ausente a un valor válido.
+// Una vez registrada, ningún cliente puede cambiarla, borrarla o eliminarla.
+function identificationUnchangedOrFirstSet() {
+  let previous = resource.data.get('identification', '');
+  let next = request.resource.data.get('identification', null);
+  return (previous == '' && (next == '' || validIdentification(next)))
+    || (previous != '' && next == previous);
+}
+
 function validProfileChanges() {
-  let changed =
-    request.resource.data.diff(resource.data).affectedKeys();
-
+  let changed = request.resource.data.diff(resource.data).affectedKeys();
   let data = request.resource.data;
-
-  return (
-      !changed.hasAny(['name'])
-      || validName(data.get('name', null))
-    )
-    && (
-      !changed.hasAny(['email'])
-      || validEmail(data.get('email', null))
-    )
-    && (
-      !changed.hasAny(['identification'])
-      || data.get('identification', null) == ''
-      || validIdentification(data.get('identification', null))
-    )
-    && (
-      !changed.hasAny(['phone'])
-      || data.get('phone', null) == ''
-      || validPhone(data.get('phone', null))
-    )
-    && (
-      !changed.hasAny(['unit'])
-      || data.get('unit', null) == ''
-      || validUnit(data.get('unit', null))
-    );
+  return identificationUnchangedOrFirstSet()
+    && (!changed.hasAny(['name']) || validName(data.get('name', null)))
+    && (!changed.hasAny(['email']) || validEmail(data.get('email', null)))
+    && (!changed.hasAny(['phone']) || validPhone(data.get('phone', null)))
+    && (!changed.hasAny(['unit']) || validUnit(data.get('unit', null)));
 }
 
     // FUNCIONES DE SEGURIDAD
@@ -215,26 +203,42 @@ function validTransitionEvent(id) {
 
     // USUARIOS
     match /users/{uid} {
-  allow read: if signed()
-    && (request.auth.uid == uid || staff());
+      // El perfil completo solo está disponible para su dueño y para
+      // administración/RRHH, que ya intervenían en el flujo del proyecto.
+      // Un superior no obtiene acceso general a los perfiles.
+      allow read: if signed()
+        && (request.auth.uid == uid || staff());
 
-  allow create: if signed()
-    && request.auth.uid == uid
-    && request.resource.data.role == 'declarante'
-    && validInitialProfile(request.resource.data);
+      allow create: if signed()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly([
+          'name', 'email', 'role', 'unit', 'identification', 'phone'
+        ])
+        && request.resource.data.role == 'declarante'
+        && validInitialProfile(request.resource.data);
 
-  allow update: if signed()
-    && validProfileChanges()
-    && (
-      (
-        request.auth.uid == uid
-        && request.resource.data.role == resource.data.role
-      )
-      || role() == 'admin'
-    );
+      allow update: if signed()
+        && validProfileChanges()
+        && (
+          (
+            request.auth.uid == uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'name', 'email', 'unit', 'identification', 'phone'
+            ])
+          )
+          || (
+            role() == 'admin'
+            && request.auth.uid != uid
+            // Administración puede asignar roles; no modificar la cédula ajena.
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role'])
+            && request.resource.data.role in ['declarante', 'superior', 'rrhh', 'admin']
+          )
+        );
 
-  allow delete: if role() == 'admin';
-}
+      // Impide eliminar y recrear un perfil para reemplazar la cédula.
+      // Bajas y correcciones excepcionales requieren un proceso de servidor.
+      allow delete: if false;
+    }
 
     // PERIODOS ACADEMICOS
     match /periods/{id} {
@@ -382,5 +386,3 @@ allow create: if signed()
     }
   }
 }
-
-

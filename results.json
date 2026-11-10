@@ -1,0 +1,224 @@
+{
+  "projectId": "demo-declaraucr-validation",
+  "time": "2026-10-22T03:07:15.828Z",
+  "passed": 54,
+  "failed": 0,
+  "results": [
+    {
+      "name": "Perfil: teléfono válido permitido",
+      "pass": true
+    },
+    {
+      "name": "Perfil rechaza phone=\"abcdefgh\"",
+      "pass": true
+    },
+    {
+      "name": "Perfil rechaza phone=\"1234567\"",
+      "pass": true
+    },
+    {
+      "name": "Perfil rechaza phone=88887777",
+      "pass": true
+    },
+    {
+      "name": "Perfil rechaza identification=\"12345678\"",
+      "pass": true
+    },
+    {
+      "name": "Perfil rechaza identification=\"12345678A\"",
+      "pass": true
+    },
+    {
+      "name": "Perfil rechaza email=\"correo@\"",
+      "pass": true
+    },
+    {
+      "name": "Perfil rechaza name=\"Juan123 Pérez\"",
+      "pass": true
+    },
+    {
+      "name": "Perfil rechaza unit=\" \"",
+      "pass": true
+    },
+    {
+      "name": "Perfil: autoincremento de rol bloqueado",
+      "pass": true
+    },
+    {
+      "name": "Perfil: administrador conserva cambio de rol",
+      "pass": true
+    },
+    {
+      "name": "Registro: datos válidos y campos opcionales vacíos",
+      "pass": true
+    },
+    {
+      "name": "Registro: teléfono inválido rechazado",
+      "pass": true
+    },
+    {
+      "name": "Crear: declaración + versión + historial válidos",
+      "pass": true
+    },
+    {
+      "name": "Crear rechaza phone caso 1",
+      "pass": true
+    },
+    {
+      "name": "Crear rechaza phone caso 2",
+      "pass": true
+    },
+    {
+      "name": "Crear rechaza phone caso 3",
+      "pass": true
+    },
+    {
+      "name": "Crear rechaza identification caso 4",
+      "pass": true
+    },
+    {
+      "name": "Crear rechaza identification caso 5",
+      "pass": true
+    },
+    {
+      "name": "Crear rechaza email caso 6",
+      "pass": true
+    },
+    {
+      "name": "Crear rechaza ownerName caso 7",
+      "pass": true
+    },
+    {
+      "name": "Crear rechaza unit caso 8",
+      "pass": true
+    },
+    {
+      "name": "Crear rechaza phone caso 9",
+      "pass": true
+    },
+    {
+      "name": "Crear rechaza identification caso 10",
+      "pass": true
+    },
+    {
+      "name": "Crear rechaza unit caso 11",
+      "pass": true
+    },
+    {
+      "name": "Crear rechaza observations caso 12",
+      "pass": true
+    },
+    {
+      "name": "Crear: período cerrado rechazado",
+      "pass": true
+    },
+    {
+      "name": "Editar: datos válidos con historial y versión",
+      "pass": true
+    },
+    {
+      "name": "Editar: conserva devolución y fecha de creación",
+      "pass": true
+    },
+    {
+      "name": "Editar: teléfono inválido rechazado en lote",
+      "pass": true
+    },
+    {
+      "name": "Versión: copia inválida rechazada con padre válido",
+      "pass": true
+    },
+    {
+      "name": "Editar: sin evento de auditoría bloqueado",
+      "pass": true
+    },
+    {
+      "name": "Editar: sin modificación real bloqueado",
+      "pass": true
+    },
+    {
+      "name": "Seguridad: anónimo no puede leer",
+      "pass": true
+    },
+    {
+      "name": "Seguridad: otro declarante no puede leer",
+      "pass": true
+    },
+    {
+      "name": "Seguridad: otro declarante no puede editar",
+      "pass": true
+    },
+    {
+      "name": "Superior asignado puede leer",
+      "pass": true
+    },
+    {
+      "name": "RRHH puede leer",
+      "pass": true
+    },
+    {
+      "name": "Flujo: validate",
+      "pass": true
+    },
+    {
+      "name": "Flujo: submit",
+      "pass": true
+    },
+    {
+      "name": "Flujo: signOwner",
+      "pass": true
+    },
+    {
+      "name": "Flujo: route",
+      "pass": true
+    },
+    {
+      "name": "Flujo: signSuperior",
+      "pass": true
+    },
+    {
+      "name": "Flujo: sendHr",
+      "pass": true
+    },
+    {
+      "name": "Flujo: receive",
+      "pass": true
+    },
+    {
+      "name": "Flujo: finish",
+      "pass": true
+    },
+    {
+      "name": "Versión firmada no puede editarse",
+      "pass": true
+    },
+    {
+      "name": "PDF: cliente no puede escribir artifact",
+      "pass": true
+    },
+    {
+      "name": "Devolución del superior con observación",
+      "pass": true
+    },
+    {
+      "name": "Nueva versión después de devolución",
+      "pass": true
+    },
+    {
+      "name": "Borrador antiguo inválido no puede validarse",
+      "pass": true
+    },
+    {
+      "name": "Nombre válido: José Pérez",
+      "pass": true
+    },
+    {
+      "name": "Nombre válido: Ana-María O'Connor",
+      "pass": true
+    },
+    {
+      "name": "Nombre válido: María D’Angelo",
+      "pass": true
+    }
+  ]
+}

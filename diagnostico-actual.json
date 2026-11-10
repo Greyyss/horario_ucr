@@ -1,0 +1,272 @@
+{
+  "method": "Dart directo: servicio original sin cambios y modelos TimeBlock/Appointment originales; sin Flutter ni Firebase",
+  "passed": 55,
+  "failed": 9,
+  "results": [
+    {
+      "name": "N01: nombramiento completo y cuatro horas validas",
+      "pass": true
+    },
+    {
+      "name": "N02: debe existir al menos un nombramiento institucional",
+      "pass": true
+    },
+    {
+      "name": "N03: trabajo externo no sustituye nombramiento institucional",
+      "pass": true
+    },
+    {
+      "name": "N04: institucion vacia o espacios 0",
+      "pass": true
+    },
+    {
+      "name": "N04: institucion vacia o espacios 3",
+      "pass": true
+    },
+    {
+      "name": "N05: puesto vacio o espacios 0",
+      "pass": true
+    },
+    {
+      "name": "N05: puesto vacio o espacios 3",
+      "pass": true
+    },
+    {
+      "name": "N06: nombramiento sin bloques",
+      "pass": true
+    },
+    {
+      "name": "N07: jornada negativa rechazada",
+      "pass": true
+    },
+    {
+      "name": "N08: jornada cero rechazada",
+      "pass": true
+    },
+    {
+      "name": "N09: jornada NaN rechazada",
+      "pass": false,
+      "error": "Bad state: Se aceptaron datos invalidos."
+    },
+    {
+      "name": "N10: jornada infinita rechazada",
+      "pass": true
+    },
+    {
+      "name": "N11: jornada externa cero rechazada aunque no sume al total UCR",
+      "pass": false,
+      "error": "Bad state: Se aceptaron datos invalidos."
+    },
+    {
+      "name": "N12: jornada externa negativa rechazada",
+      "pass": false,
+      "error": "Bad state: Se aceptaron datos invalidos."
+    },
+    {
+      "name": "N13: jornada externa NaN rechazada",
+      "pass": false,
+      "error": "Bad state: Se aceptaron datos invalidos."
+    },
+    {
+      "name": "N14: jornada externa infinita rechazada",
+      "pass": false,
+      "error": "Bad state: Se aceptaron datos invalidos."
+    },
+    {
+      "name": "F01: fechas iguales son validas",
+      "pass": true
+    },
+    {
+      "name": "F02: fin anterior al inicio",
+      "pass": true
+    },
+    {
+      "name": "F03: fecha inicial vacia",
+      "pass": true
+    },
+    {
+      "name": "F04: fecha final vacia",
+      "pass": true
+    },
+    {
+      "name": "F05: fecha inicial en texto libre",
+      "pass": true
+    },
+    {
+      "name": "F06: fecha final en texto libre",
+      "pass": true
+    },
+    {
+      "name": "F07: No aplica permite omitir el fin",
+      "pass": true
+    },
+    {
+      "name": "F08: No aplica tolera espacios y mayusculas",
+      "pass": true
+    },
+    {
+      "name": "F09: No aplica no elimina la obligacion de fecha inicial",
+      "pass": true
+    },
+    {
+      "name": "F10: 29 febrero en anio bisiesto permitido",
+      "pass": true
+    },
+    {
+      "name": "F11: 29 febrero en anio no bisiesto rechazado",
+      "pass": false,
+      "error": "Bad state: Se aceptaron datos invalidos."
+    },
+    {
+      "name": "F12: 31 abril rechazado",
+      "pass": false,
+      "error": "Bad state: Se aceptaron datos invalidos."
+    },
+    {
+      "name": "F13: mes 13 rechazado",
+      "pass": false,
+      "error": "Bad state: Se aceptaron datos invalidos."
+    },
+    {
+      "name": "F14: fecha final inexistente rechazada",
+      "pass": false,
+      "error": "Bad state: Se aceptaron datos invalidos."
+    },
+    {
+      "name": "H01: parseo de medianoche y limite superior",
+      "pass": true
+    },
+    {
+      "name": "H02: hora invalida \"24:00\"",
+      "pass": true
+    },
+    {
+      "name": "H02: hora invalida \"12:60\"",
+      "pass": true
+    },
+    {
+      "name": "H02: hora invalida \"-1:00\"",
+      "pass": true
+    },
+    {
+      "name": "H02: hora invalida \"ab:cd\"",
+      "pass": true
+    },
+    {
+      "name": "H02: hora invalida \"0800\"",
+      "pass": true
+    },
+    {
+      "name": "H02: hora invalida \"08:00:00\"",
+      "pass": true
+    },
+    {
+      "name": "H02: hora invalida \"\"",
+      "pass": true
+    },
+    {
+      "name": "H03: dia fuera de lunes a sabado 0",
+      "pass": true
+    },
+    {
+      "name": "H03: dia fuera de lunes a sabado 7",
+      "pass": true
+    },
+    {
+      "name": "H04: sabado permitido",
+      "pass": true
+    },
+    {
+      "name": "H05: inicio y fin iguales rechazados",
+      "pass": true
+    },
+    {
+      "name": "H06: fin anterior rechazado",
+      "pass": true
+    },
+    {
+      "name": "H07: formato invalido produce error sin lanzar excepcion",
+      "pass": true
+    },
+    {
+      "name": "H08: finalizar exactamente al mediodia permitido",
+      "pass": true
+    },
+    {
+      "name": "H09: iniciar exactamente a las 13 permitido",
+      "pass": true
+    },
+    {
+      "name": "H10: invasion de almuerzo 11:59-12:01",
+      "pass": true
+    },
+    {
+      "name": "H10: invasion de almuerzo 12:00-13:00",
+      "pass": true
+    },
+    {
+      "name": "H10: invasion de almuerzo 12:59-13:01",
+      "pass": true
+    },
+    {
+      "name": "H11: bloques contiguos no se traslapan",
+      "pass": true
+    },
+    {
+      "name": "H12: traslape parcial interno",
+      "pass": true
+    },
+    {
+      "name": "H13: bloque anidado dentro de otro",
+      "pass": true
+    },
+    {
+      "name": "H14: duplicado exacto de bloque",
+      "pass": true
+    },
+    {
+      "name": "H15: traslape entre nombramientos institucionales",
+      "pass": true
+    },
+    {
+      "name": "H16: traslape institucional con externo",
+      "pass": true
+    },
+    {
+      "name": "H17: traslape entre dos externos",
+      "pass": true
+    },
+    {
+      "name": "H18: mismas horas en dias diferentes permitidas",
+      "pass": true
+    },
+    {
+      "name": "H19: exactamente diez horas diarias permitidas",
+      "pass": true
+    },
+    {
+      "name": "H20: diez horas y un minuto rechazados",
+      "pass": true
+    },
+    {
+      "name": "H21: maximo diario incluye trabajos externos",
+      "pass": true
+    },
+    {
+      "name": "H22: menos horas de las esperadas rechazado",
+      "pass": true
+    },
+    {
+      "name": "H23: mas horas de las esperadas rechazado",
+      "pass": true
+    },
+    {
+      "name": "H24: trabajo externo no completa jornada institucional faltante",
+      "pass": true
+    },
+    {
+      "name": "H25: calculo de fracciones y total externo separado",
+      "pass": true
+    }
+  ]
+}

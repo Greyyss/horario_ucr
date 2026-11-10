@@ -127,11 +127,15 @@ class _LoginPageState extends State<LoginPage> {
 
   final TextEditingController passwordController = TextEditingController();
 
+  final TextEditingController confirmPasswordController =
+      TextEditingController();
+
   final TextEditingController nameController = TextEditingController();
 
   bool isRegistering = false;
   bool isLoading = false;
   bool showPassword = false;
+  bool showConfirmPassword = false;
   bool rememberEmail = false;
 
   String? errorMessage;
@@ -150,10 +154,11 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> submit() async {
     if (isLoading) return;
 
-    final String email = emailController.text.trim();
-    final String password = passwordController.text;
-    final String name =
-        nameController.text.trim().replaceAll(RegExp(r'\s+'), ' ');
+    final email = emailController.text.trim();
+    final password = passwordController.text;
+    final name = PersonalDataValidator.normalizeName(
+      nameController.text,
+    );
 
     if (email.isEmpty || password.isEmpty) {
       setState(() {
@@ -162,10 +167,30 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
 
+    // Confirmar contraseña únicamente al registrarse.
     if (isRegistering) {
+      final confirmPassword = confirmPasswordController.text;
+
+      if (confirmPassword.isEmpty) {
+        setState(() {
+          errorMessage = 'Confirmá tu contraseña.';
+        });
+        return;
+      }
+
+      if (password != confirmPassword) {
+        setState(() {
+          errorMessage = 'Las contraseñas no coinciden.';
+        });
+        return;
+      }
+
       final nameError = validateFullName(name);
+
       if (nameError != null) {
-        setState(() => errorMessage = nameError);
+        setState(() {
+          errorMessage = nameError;
+        });
         return;
       }
     }
@@ -319,7 +344,16 @@ class _LoginPageState extends State<LoginPage> {
   void toggleAuthMode() {
     setState(() {
       isRegistering = !isRegistering;
-      if (!rememberEmail) emailController.clear();
+
+      if (!rememberEmail) {
+        emailController.clear();
+      }
+
+      passwordController.clear();
+      confirmPasswordController.clear();
+
+      showPassword = false;
+      showConfirmPassword = false;
       errorMessage = null;
     });
   }
@@ -332,6 +366,7 @@ class _LoginPageState extends State<LoginPage> {
   void dispose() {
     emailController.dispose();
     passwordController.dispose();
+    confirmPasswordController.dispose();
     nameController.dispose();
 
     super.dispose();
@@ -450,7 +485,9 @@ class _LoginPageState extends State<LoginPage> {
           TextField(
             controller: passwordController,
             obscureText: !showPassword,
-            onSubmitted: (_) => submit(),
+            enableSuggestions: false,
+            autocorrect: false,
+            textInputAction: TextInputAction.next,
             decoration: _fieldDecoration(
               'Ingresá tu contraseña',
               Icons.lock_outline,
@@ -466,6 +503,38 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
           ),
+          if (isRegistering) ...[
+            const SizedBox(height: 17),
+            _label('Confirmar contraseña'),
+            TextField(
+              controller: confirmPasswordController,
+              obscureText: !showConfirmPassword,
+              enableSuggestions: false,
+              autocorrect: false,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => submit(),
+              decoration: _fieldDecoration(
+                'Ingresá nuevamente tu contraseña',
+                Icons.lock_outline,
+                suffix: IconButton(
+                  tooltip: showConfirmPassword
+                      ? 'Ocultar confirmación de contraseña'
+                      : 'Mostrar confirmación de contraseña',
+                  onPressed: () {
+                    setState(() {
+                      showConfirmPassword = !showConfirmPassword;
+                    });
+                  },
+                  icon: Icon(
+                    showConfirmPassword
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                    color: navy,
+                  ),
+                ),
+              ),
+            ),
+          ],
           if (!isRegistering) ...[
             const SizedBox(height: 12),
             Row(children: [

@@ -9,29 +9,45 @@ class TimeBlock {
   final String start;
   final String end;
 
+  // Siglas del curso. Ejemplo: IF0011.
+  final String? courseCode;
+
+  // Valores que utilizará el formulario:
+  // CONTACTO, CONSULTA o PREPARACION.
+  final String? activityType;
+
+  // Nombre de una actividad que no corresponde a un curso.
+  // Ejemplo: Comisión de autoevaluación.
+  final String? activityName;
+
   const TimeBlock({
     required this.day,
     required this.start,
     required this.end,
+    this.courseCode,
+    this.activityType,
+    this.activityName,
   });
-
-  // Convertir el bloque de horario a un mapa.
 
   Map<String, dynamic> toMap() {
     return {
       'day': day,
       'start': start,
       'end': end,
+      if (courseCode != null) 'courseCode': courseCode,
+      if (activityType != null) 'activityType': activityType,
+      if (activityName != null) 'activityName': activityName,
     };
   }
-
-  // Crear un bloque de horario desde un mapa.
 
   factory TimeBlock.fromMap(Map<String, dynamic> map) {
     return TimeBlock(
       day: (map['day'] as num).toInt(),
       start: map['start'] ?? '',
       end: map['end'] ?? '',
+      courseCode: map['courseCode'] as String?,
+      activityType: map['activityType'] as String?,
+      activityName: map['activityName'] as String?,
     );
   }
 }
@@ -45,10 +61,12 @@ class Appointment {
   final String position;
   final String startDate;
   final String endDate;
-
   final double expectedHours;
-
   final List<TimeBlock> blocks;
+
+  // Fracción de jornada UCR: 1/8, 1/4, 1/2, 1 TC, etc.
+  // Es null para trabajos externos y registros antiguos.
+  final String? workloadFraction;
 
   const Appointment({
     required this.workplace,
@@ -57,9 +75,8 @@ class Appointment {
     required this.endDate,
     required this.expectedHours,
     required this.blocks,
+    this.workloadFraction,
   });
-
-  // Convertir el nombramiento a un mapa.
 
   Map<String, dynamic> toMap() {
     return {
@@ -68,13 +85,13 @@ class Appointment {
       'startDate': startDate,
       'endDate': endDate,
       'expectedHours': expectedHours,
+      if (workloadFraction != null)
+        'workloadFraction': workloadFraction,
       'blocks': blocks.map((block) {
         return block.toMap();
       }).toList(),
     };
   }
-
-  // Crear un nombramiento desde un mapa.
 
   factory Appointment.fromMap(Map<String, dynamic> map) {
     return Appointment(
@@ -83,6 +100,7 @@ class Appointment {
       startDate: map['startDate'] ?? '',
       endDate: map['endDate'] ?? '',
       expectedHours: (map['expectedHours'] as num? ?? 0).toDouble(),
+      workloadFraction: map['workloadFraction'] as String?,
       blocks: (map['blocks'] as List? ?? []).map((block) {
         return TimeBlock.fromMap(
           Map<String, dynamic>.from(block),
@@ -135,7 +153,7 @@ class Declaration {
   });
 
   // ==========================================================
-  // CONVERTIR DECLARACION A MAPA PARA FIRESTORE
+  // CONVERTIR DECLARACIÓN A MAPA PARA FIRESTORE
   // ==========================================================
 
   Map<String, dynamic> toMap() {
@@ -162,7 +180,7 @@ class Declaration {
   }
 
   // ==========================================================
-  // CREAR DECLARACION DESDE FIRESTORE
+  // CREAR DECLARACIÓN DESDE FIRESTORE
   // ==========================================================
 
   factory Declaration.fromDoc(
