@@ -1,6 +1,7 @@
 # Horario UCR Integrador — Proyecto Integrador 2
 
 Aplicación Flutter Web académica para declaraciones juradas de horario, basada en el enunciado IF0009 de la UCR.
+Link oficial de la app: https://declarahorario-ucr-cff7a.web.app
 
 ## IMPORTANTE: una sola carpeta
 
