@@ -38,15 +38,6 @@ class ProfileService {
       'email': email.trim(),
       'unit': unit.trim(),
     };
-    final errors = <String?>[
-      PersonalDataValidator.name(values['name']),
-      PersonalDataValidator.identification(values['identification']),
-      PersonalDataValidator.phone(values['phone']),
-      PersonalDataValidator.email(values['email']),
-      PersonalDataValidator.unit(values['unit']),
-    ].whereType<String>().toList();
-    if (errors.isNotEmpty) throw StateError(errors.join('\n'));
-
     final reference = _reference();
     await FirebaseFirestore.instance.runTransaction((transaction) async {
       final snapshot = await transaction.get(reference);
@@ -56,8 +47,21 @@ class ProfileService {
           'No se encontró tu perfil. Contactá al administrador.',
         );
       }
+      final fromPadron = current['identitySource'] == 'padron';
+      final errors = <String?>[
+        if (!fromPadron) PersonalDataValidator.name(values['name']),
+        if (!fromPadron)
+          PersonalDataValidator.identification(values['identification']),
+        PersonalDataValidator.phone(values['phone']),
+        PersonalDataValidator.email(values['email']),
+        PersonalDataValidator.unit(values['unit']),
+      ].whereType<String>().toList();
+      if (errors.isNotEmpty) throw StateError(errors.join('\n'));
+
       final previousId = (current['identification'] ?? '').toString();
-      if (previousId.isNotEmpty && previousId != values['identification']) {
+      if (!fromPadron &&
+          previousId.isNotEmpty &&
+          previousId != values['identification']) {
         throw StateError(
           'La cédula ya está registrada y no se puede cambiar. '
           'Volvé a abrir tus datos personales.',
@@ -65,7 +69,13 @@ class ProfileService {
       }
       // La transacción vuelve a leer el perfil si otra pestaña lo modifica.
       // Las reglas de Firestore también hacen cumplir la inmutabilidad.
-      transaction.update(reference, values);
+      transaction.update(reference, {
+        if (!fromPadron) 'name': values['name']!,
+        if (!fromPadron) 'identification': values['identification']!,
+        'phone': values['phone']!,
+        'email': values['email']!,
+        'unit': values['unit']!,
+      });
     });
   }
 }

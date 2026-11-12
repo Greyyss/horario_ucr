@@ -23,6 +23,7 @@ class _PersonalProfilePageState extends State<PersonalProfilePage> {
   final _unit = TextEditingController();
   bool _loading = true;
   bool _saving = false;
+  bool _padronLocked = false;
   bool _identificationLocked = true;
   String? _error;
 
@@ -46,7 +47,9 @@ class _PersonalProfilePageState extends State<PersonalProfilePage> {
         _phone.text = (data['phone'] ?? '').toString();
         _email.text = (data['email'] ?? '').toString();
         _unit.text = (data['unit'] ?? '').toString();
-        _identificationLocked = _identification.text.isNotEmpty;
+        _padronLocked = data['identitySource'] == 'padron';
+        _identificationLocked =
+            _padronLocked || _identification.text.isNotEmpty;
       });
     } catch (_) {
       if (!mounted) return;
@@ -61,7 +64,9 @@ class _PersonalProfilePageState extends State<PersonalProfilePage> {
 
   Future<void> _save() async {
     if (_saving || _loading) return;
-    _name.text = PersonalDataValidator.normalizeName(_name.text);
+    if (!_padronLocked) {
+      _name.text = PersonalDataValidator.normalizeName(_name.text);
+    }
     for (final controller in [_identification, _phone, _email, _unit]) {
       controller.text = controller.text.trim();
     }
@@ -152,7 +157,7 @@ class _PersonalProfilePageState extends State<PersonalProfilePage> {
         inputFormatters:
             digits == null ? null : [FilteringTextInputFormatter.digitsOnly],
         autovalidateMode: AutovalidateMode.onUserInteraction,
-        validator: validator,
+        validator: readOnly ? null : validator,
         decoration: InputDecoration(
           labelText: label,
           helperText: helperText,
@@ -206,15 +211,18 @@ class _PersonalProfilePageState extends State<PersonalProfilePage> {
                           child: ListView(
                             padding: const EdgeInsets.all(24),
                             children: [
-                              const Text(
-                                'Estos datos se usan para completar tus declaraciones. '
-                                'Podés actualizar tu nombre, teléfono, correo de contacto '
-                                'y unidad. La cédula se registra una sola vez.',
+                              Text(
+                                _padronLocked
+                                    ? 'Tu nombre y cédula se tomaron del padrón. '
+                                        'Podés actualizar tu teléfono, correo de contacto y unidad.'
+                                    : 'Podés actualizar tu nombre, teléfono, correo de contacto '
+                                        'y unidad. La cédula se registra una sola vez.',
                               ),
                               const SizedBox(height: 24),
                               _field(
                                 controller: _name,
                                 label: 'Nombre y apellidos',
+                                readOnly: _padronLocked,
                                 validator: PersonalDataValidator.name,
                               ),
                               _field(

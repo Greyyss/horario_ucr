@@ -1,21 +1,47 @@
-import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'services/personal_data_validator.dart';
-import '../firebase_options.dart';
-import '../pages/dashboard.dart';
 
+import 'firebase_options.dart';
+import 'pages/dashboard.dart';
+import 'services/personal_data_validator.dart';
+
+final registroPadronEnCurso = ValueNotifier<bool>(false);
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  const usarEmuladores = bool.fromEnvironment('USE_FIREBASE_EMULATORS');
+  const habilitarPadron = bool.fromEnvironment('ENABLE_PADRON_AUTOCOMPLETE');
 
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
 
+    if (usarEmuladores) {
+      await FirebaseAuth.instance.useAuthEmulator('127.0.0.1', 9099);
+      FirebaseFirestore.instance.useFirestoreEmulator('127.0.0.1', 8080);
+      FirebaseFunctions.instanceFor(region: 'us-east1')
+          .useFunctionsEmulator('127.0.0.1', 5001);
+    }
+
     runApp(const DeclaraApp());
+
+    if (habilitarPadron && !usarEmuladores) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        try {
+          await FirebaseAppCheck.instance.activate(
+            webProvider: ReCaptchaEnterpriseProvider('6LfySBwuAAAAAA1VQllwG09gmsEvtTsVgq8SZQnR'),
+          );
+        } catch (error) {
+          debugPrint('App Check falló: $error');
+        }
+      });
+    }
   } catch (error) {
     runApp(
       MaterialApp(
@@ -40,7 +66,6 @@ Future<void> main() async {
     );
   }
 }
-
 // ============================================================
 // MAIN APPLICATION
 // ============================================================
@@ -104,7 +129,51 @@ class DeclaraApp extends StatelessWidget {
             return const LoginPage();
           }
 
-          return const Dashboard();
+          final uid = snapshot.data!.uid;
+
+          return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+            key: ValueKey(uid),
+            stream: FirebaseFirestore.instance
+                .collection('users')
+                .doc(uid)
+                .snapshots(),
+            builder: (context, perfil) {
+              if (perfil.hasError) {
+                return Scaffold(
+                  body: Center(
+                    child: TextButton(
+                      onPressed: () => FirebaseAuth.instance.signOut(),
+                      child: Text(
+                          'Error al leer el perfil: ${perfil.error}\nCerrar sesión'),
+                    ),
+                  ),
+                );
+              }
+
+              if (!perfil.hasData) {
+                return const Scaffold(
+                  body: Center(child: CircularProgressIndicator()),
+                );
+              }
+
+              if (perfil.data!.exists) {
+                return const Dashboard();
+              }
+
+              return ValueListenableBuilder<bool>(
+                valueListenable: registroPadronEnCurso,
+                builder: (context, guardando, child) {
+                  if (guardando) {
+                    return const Scaffold(
+                      body: Center(child: CircularProgressIndicator()),
+                    );
+                  }
+
+                  return const RegistroPadronPage();
+                },
+              );
+            },
+          );
         },
       ),
     );
@@ -130,7 +199,54 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController confirmPasswordController =
       TextEditingController();
 
-  final TextEditingController nameController = TextEditingController();
+    static const consultaPrevia =
+      bool.fromEnvironment('USE_FIREBASE_EMULATORS') ||
+      bool.fromEnvironment('ENABLE_PADRON_AUTOCOMPLETE');
+  final cedulaRegistro = TextEditingController();
+  final nombresRegistro = TextEditingController();
+  final apellidosRegistro = TextEditingController();
+  String? nombreConsultado;
+  int revisionConsulta = 0;
+  bool consultando = false;
+
+  Future<void> consultarCedula(String cedula) async {
+    final revision = ++revisionConsulta;
+    final valida = RegExp(r'^[0-9]{9}$').hasMatch(cedula);
+
+    setState(() {
+      nombresRegistro.clear();
+      apellidosRegistro.clear();
+      nombreConsultado = null;
+      errorMessage = null;
+      consultando = valida;
+    });
+    if (!valida) return;
+
+    try {
+      final resultado = await FirebaseFunctions.instanceFor(region: 'us-east1')
+          .httpsCallable('consultarPadronRegistro')
+          .call<Map<String, dynamic>>({'cedula': cedula});
+      if (!mounted || revision != revisionConsulta) return;
+
+      final datos = resultado.data;
+      setState(() {
+        nombresRegistro.text = datos['nombres'] as String;
+        apellidosRegistro.text = datos['apellidos'] as String;
+        nombreConsultado = datos['nombreCompleto'] as String;
+      });
+    } on FirebaseFunctionsException catch (e) {
+      if (!mounted || revision != revisionConsulta) return;
+      setState(
+          () => errorMessage = e.message ?? 'No se pudo consultar el padrón.');
+    } catch (_) {
+      if (!mounted || revision != revisionConsulta) return;
+      setState(() => errorMessage = 'No se pudo consultar el padrón.');
+    } finally {
+      if (mounted && revision == revisionConsulta) {
+        setState(() => consultando = false);
+      }
+    }
+  }
 
   bool isRegistering = false;
   bool isLoading = false;
@@ -139,13 +255,6 @@ class _LoginPageState extends State<LoginPage> {
   bool rememberEmail = false;
 
   String? errorMessage;
-
-  // Validación del nombre antes de crear la cuenta.
-  // Acepta nombres compuestos, tildes, ñ, diéresis,
-  // apóstrofos y guiones usados en apellidos.
-  String? validateFullName(String name) {
-    return PersonalDataValidator.name(name);
-  }
 
   // ==========================================================
   // AUTHENTICATION
@@ -156,9 +265,6 @@ class _LoginPageState extends State<LoginPage> {
 
     final email = emailController.text.trim();
     final password = passwordController.text;
-    final name = PersonalDataValidator.normalizeName(
-      nameController.text,
-    );
 
     if (email.isEmpty || password.isEmpty) {
       setState(() {
@@ -169,6 +275,12 @@ class _LoginPageState extends State<LoginPage> {
 
     // Confirmar contraseña únicamente al registrarse.
     if (isRegistering) {
+      if (consultaPrevia && (consultando || nombreConsultado == null)) {
+        setState(
+            () => errorMessage = 'Consultá tu cédula antes de registrarte.');
+        return;
+      }
+
       final confirmPassword = confirmPasswordController.text;
 
       if (confirmPassword.isEmpty) {
@@ -184,15 +296,6 @@ class _LoginPageState extends State<LoginPage> {
         });
         return;
       }
-
-      final nameError = validateFullName(name);
-
-      if (nameError != null) {
-        setState(() {
-          errorMessage = nameError;
-        });
-        return;
-      }
     }
 
     setState(() {
@@ -203,7 +306,6 @@ class _LoginPageState extends State<LoginPage> {
     try {
       if (isRegistering) {
         await registerUser(
-          name: name,
           email: email,
           password: password,
         );
@@ -218,6 +320,11 @@ class _LoginPageState extends State<LoginPage> {
 
       setState(() {
         errorMessage = getAuthErrorMessage(error.code);
+      });
+          } on FirebaseFunctionsException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        errorMessage = error.message ?? 'No se pudo comprobar la cédula.';
       });
     } catch (error) {
       if (!mounted) return;
@@ -239,53 +346,48 @@ class _LoginPageState extends State<LoginPage> {
   // ==========================================================
 
   Future<void> registerUser({
-    required String name,
     required String email,
     required String password,
   }) async {
-    final normalizedName = PersonalDataValidator.normalizeName(name);
-
     final normalizedEmail = email.trim();
-
-    final nameError = PersonalDataValidator.name(normalizedName);
-
-    if (nameError != null) {
-      throw StateError(nameError);
-    }
-
     final emailError = PersonalDataValidator.email(normalizedEmail);
 
     if (emailError != null) {
       throw StateError(emailError);
     }
 
-    if (emailError != null) {
-      throw StateError(emailError);
-    }
-    final UserCredential credential =
-        await FirebaseAuth.instance.createUserWithEmailAndPassword(
-      email: normalizedEmail,
-      password: password,
-    );
+    final cedula = cedulaRegistro.text.trim();
+    final nombre = nombreConsultado;
 
-    final User? user = credential.user;
+    final completarAutomaticamente = consultaPrevia && nombre != null;
+    registroPadronEnCurso.value = completarAutomaticamente;
 
-    if (user == null) {
-      throw StateError(
-        'No se pudo obtener la información del usuario.',
+    try {
+            if (completarAutomaticamente) {
+        await FirebaseFunctions.instanceFor(region: 'us-east1')
+            .httpsCallable('consultarPadronRegistro')
+            .call<Map<String, dynamic>>({
+          'accion': 'verificarDisponibilidad',
+          'cedula': cedula,
+        });
+      }
+      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: normalizedEmail,
+        password: password,
       );
+
+      if (completarAutomaticamente) {
+        await FirebaseFunctions.instanceFor(region: 'us-east1')
+            .httpsCallable('registroPadron')
+            .call<Map<String, dynamic>>({
+          'accion': 'confirmar',
+          'cedula': cedula,
+          'nombreMostrado': nombre,
+        });
+      }
+    } finally {
+      registroPadronEnCurso.value = false;
     }
-
-    await user.updateDisplayName(normalizedName);
-
-    await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-      'name': normalizedName,
-      'email': normalizedEmail,
-      'role': 'declarante',
-      'unit': '',
-      'identification': '',
-      'phone': '',
-    });
   }
 
   // ==========================================================
@@ -344,6 +446,12 @@ class _LoginPageState extends State<LoginPage> {
   void toggleAuthMode() {
     setState(() {
       isRegistering = !isRegistering;
+      revisionConsulta++;
+      cedulaRegistro.clear();
+      nombresRegistro.clear();
+      apellidosRegistro.clear();
+      nombreConsultado = null;
+      consultando = false;
 
       if (!rememberEmail) {
         emailController.clear();
@@ -364,11 +472,12 @@ class _LoginPageState extends State<LoginPage> {
 
   @override
   void dispose() {
+    cedulaRegistro.dispose();
+    nombresRegistro.dispose();
+    apellidosRegistro.dispose();
     emailController.dispose();
     passwordController.dispose();
     confirmPasswordController.dispose();
-    nameController.dispose();
-
     super.dispose();
   }
 
@@ -458,17 +567,38 @@ class _LoginPageState extends State<LoginPage> {
           const SizedBox(height: 4),
           Text(
               isRegistering
-                  ? 'Completá tus datos para registrarte.'
+                  ? (consultaPrevia
+                      ? 'Ingresá tu cédula para completar tus datos.'
+                      : 'Creá tu cuenta para continuar con la consulta de cédula.')
                   : 'Ingresá tus credenciales para continuar.',
               style: const TextStyle(fontSize: 15, color: Color(0xFF758CB0))),
           const SizedBox(height: 24),
-          if (isRegistering) ...[
-            _label('Nombre y apellidos completos'),
+          if (isRegistering && consultaPrevia) ...[
+            _label('Cédula'),
             TextField(
-              controller: nameController,
-              textCapitalization: TextCapitalization.words,
-              decoration:
-                  _fieldDecoration('Nombre y apellidos', Icons.person_outline),
+              controller: cedulaRegistro,
+              enabled: !isLoading,
+              keyboardType: TextInputType.number,
+              onChanged: (valor) => consultarCedula(valor.trim()),
+              decoration: _fieldDecoration(
+                '9 dígitos, sin guiones',
+                Icons.badge_outlined,
+              ),
+            ),
+            if (consultando) const LinearProgressIndicator(),
+            const SizedBox(height: 17),
+            _label('Nombres'),
+            TextField(
+              controller: nombresRegistro,
+              readOnly: true,
+              decoration: _fieldDecoration('Nombres', Icons.person_outline),
+            ),
+            const SizedBox(height: 17),
+            _label('Apellidos'),
+            TextField(
+              controller: apellidosRegistro,
+              readOnly: true,
+              decoration: _fieldDecoration('Apellidos', Icons.person_outline),
             ),
             const SizedBox(height: 17),
           ],
@@ -570,7 +700,12 @@ class _LoginPageState extends State<LoginPage> {
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(30)),
                 ),
-                onPressed: isLoading ? null : submit,
+                onPressed: isLoading ||
+                        (isRegistering &&
+                            consultaPrevia &&
+                            (consultando || nombreConsultado == null))
+                    ? null
+                    : submit,
                 child: isLoading
                     ? const SizedBox(
                         width: 22,
@@ -736,6 +871,282 @@ class _LoginPageState extends State<LoginPage> {
           ),
         ))),
       ]),
+    );
+  }
+}
+
+class RegistroPadronPage extends StatefulWidget {
+  const RegistroPadronPage({super.key});
+
+  @override
+  State<RegistroPadronPage> createState() => _RegistroPadronPageState();
+}
+
+class _RegistroPadronPageState extends State<RegistroPadronPage> {
+  final cedulaController = TextEditingController();
+
+  String? nombre;
+  String? cedulaConsultada;
+  String? error;
+  bool cargando = false;
+
+  @override
+  void dispose() {
+    cedulaController.dispose();
+    super.dispose();
+  }
+
+  Future<void> ejecutar({required bool confirmar}) async {
+    if (cargando) return;
+
+    final cedula = cedulaController.text.trim();
+
+    if (!RegExp(r'^[0-9]{9}$').hasMatch(cedula)) {
+      setState(() => error = 'Ingresá una cédula de 9 dígitos.');
+      return;
+    }
+
+    if (confirmar && (nombre == null || cedulaConsultada != cedula)) {
+      setState(() => error = 'Consultá la cédula antes de confirmar.');
+      return;
+    }
+
+    setState(() {
+      cargando = true;
+      error = null;
+      if (!confirmar) {
+        nombre = null;
+        cedulaConsultada = null;
+      }
+    });
+
+    try {
+      final funcion = FirebaseFunctions.instanceFor(region: 'us-east1')
+          .httpsCallable('registroPadron');
+
+      final resultado = await funcion.call<Map<String, dynamic>>({
+        'accion': confirmar ? 'confirmar' : 'consultar',
+        'cedula': cedula,
+        if (confirmar) 'nombreMostrado': nombre,
+      });
+
+      if (!mounted || confirmar) return;
+
+      setState(() {
+        nombre = resultado.data['nombre'] as String;
+        cedulaConsultada = cedula;
+      });
+    } on FirebaseFunctionsException catch (e) {
+      if (mounted) {
+        setState(() {
+          error = e.message ?? 'No se pudo completar la operación.';
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => error = 'No se pudo completar la operación.');
+      }
+    } finally {
+      if (mounted) setState(() => cargando = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const azul = Color(0xFF0069D5);
+    const azulOscuro = Color(0xFF10356B);
+    final theme = Theme.of(context);
+    final nombreEncontrado = nombre;
+    final mensajeError = error;
+
+    return Scaffold(
+      body: Container(
+        constraints: const BoxConstraints.expand(),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFFD7EFFF),
+              Color(0xFFF8FCFF),
+              Color(0xFFE5F4FF),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              const margen = 16.0;
+              final altoDisponible = constraints.maxHeight - margen * 2;
+
+              return SingleChildScrollView(
+                padding: const EdgeInsets.all(margen),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    minHeight: altoDisponible > 0 ? altoDisponible : 0,
+                  ),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 520),
+                      child: Card(
+                        margin: EdgeInsets.zero,
+                        elevation: 0,
+                        color: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          side: const BorderSide(color: Color(0xFFDCE8F4)),
+                        ),
+                        child: Padding(
+                          padding: EdgeInsets.all(
+                            constraints.maxWidth < 480 ? 24 : 36,
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Image.asset(
+                                'assets/images/logo_declara_ucr.png',
+                                height: 72,
+                                fit: BoxFit.contain,
+                                semanticLabel: 'DeclaraUCR',
+                                errorBuilder: (context, error, stackTrace) =>
+                                    const Text(
+                                  'DeclaraUCR',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                    color: azulOscuro,
+                                    fontSize: 26,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 24),
+                              Text(
+                                'Completar registro',
+                                style: theme.textTheme.headlineSmall?.copyWith(
+                                  color: azulOscuro,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Ingresá tu cédula de 9 dígitos, sin guiones.',
+                                style: TextStyle(color: Color(0xFF526681)),
+                              ),
+                              const SizedBox(height: 20),
+                              TextField(
+                                controller: cedulaController,
+                                enabled: !cargando,
+                                keyboardType: TextInputType.number,
+                                textInputAction: TextInputAction.search,
+                                onSubmitted: cargando
+                                    ? null
+                                    : (_) => ejecutar(confirmar: false),
+                                onChanged: (_) => setState(() {
+                                  nombre = null;
+                                  cedulaConsultada = null;
+                                  error = null;
+                                }),
+                                decoration: const InputDecoration(
+                                  labelText: 'Cédula',
+                                  prefixIcon: Icon(Icons.badge_outlined),
+                                  filled: true,
+                                  fillColor: Color(0xFFF4F8FC),
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              OutlinedButton.icon(
+                                onPressed: cargando
+                                    ? null
+                                    : () => ejecutar(confirmar: false),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: azulOscuro,
+                                  minimumSize: const Size(0, 48),
+                                ),
+                                icon: const Icon(Icons.search),
+                                label: const Text('Consultar cédula'),
+                              ),
+                              if (cargando) ...[
+                                const SizedBox(height: 16),
+                                const LinearProgressIndicator(),
+                              ],
+                              if (mensajeError != null) ...[
+                                const SizedBox(height: 16),
+                                Semantics(
+                                  liveRegion: true,
+                                  child: Text(
+                                    mensajeError,
+                                    style: TextStyle(
+                                      color: theme.colorScheme.error,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                              if (nombreEncontrado != null) ...[
+                                const SizedBox(height: 20),
+                                Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFEEF6FF),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Nombre registrado en el padrón',
+                                        style: TextStyle(color: azulOscuro),
+                                      ),
+                                      const SizedBox(height: 6),
+                                      SelectableText(
+                                        nombreEncontrado,
+                                        style: const TextStyle(
+                                          color: azulOscuro,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                const Text(
+                                  'Al confirmar, tu nombre y tu cédula quedan '
+                                  'registrados y se bloquea su edición.',
+                                ),
+                                const SizedBox(height: 12),
+                                FilledButton.icon(
+                                  onPressed: cargando
+                                      ? null
+                                      : () => ejecutar(confirmar: true),
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: azul,
+                                    foregroundColor: Colors.white,
+                                    minimumSize: const Size(0, 48),
+                                  ),
+                                  icon: const Icon(Icons.check),
+                                  label: const Text('Confirmar registro'),
+                                ),
+                              ],
+                              const SizedBox(height: 12),
+                              TextButton(
+                                onPressed: cargando
+                                    ? null
+                                    : () => FirebaseAuth.instance.signOut(),
+                                child: const Text('Cerrar sesión'),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ),
     );
   }
 }

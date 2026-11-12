@@ -219,32 +219,48 @@ function validProfileChanges() {
       allow read: if signed()
         && (request.auth.uid == uid || staff());
 
-      allow create: if signed()
-        && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly([
-          'name', 'email', 'role', 'unit', 'identification', 'phone'
-        ])
-        && request.resource.data.role == 'declarante'
-        && validInitialProfile(request.resource.data);
+      allow create: if false;
 
-      allow update: if signed()
-        && validProfileChanges()
+                 allow update: if signed()
         && (
           (
+            // La persona edita sus propios datos.
             request.auth.uid == uid
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-              'name', 'email', 'unit', 'identification', 'phone'
-            ])
+            && validProfileChanges()
+            && request.resource.data
+                .diff(resource.data)
+                .affectedKeys()
+                .hasOnly([
+                  'name',
+                  'email',
+                  'unit',
+                  'identification',
+                  'phone'
+                ])
+            && (
+              resource.data.get('identitySource', '') != 'padron'
+              || !request.resource.data
+                  .diff(resource.data)
+                  .affectedKeys()
+                  .hasAny(['name', 'identification'])
+            )
           )
           || (
+            // Administración cambia solamente el rol de una cuenta ajena.
             role() == 'admin'
             && request.auth.uid != uid
-            // Administración puede asignar roles; no modificar la cédula ajena.
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role'])
-            && request.resource.data.role in ['declarante', 'superior', 'rrhh', 'admin']
+            && request.resource.data
+                .diff(resource.data)
+                .affectedKeys()
+                .hasOnly(['role'])
+            && request.resource.data.role in [
+              'declarante',
+              'superior',
+              'rrhh',
+              'admin'
+            ]
           )
         );
-
       // Impide eliminar y recrear un perfil para reemplazar la cédula.
       // Bajas y correcciones excepcionales requieren un proceso de servidor.
       allow delete: if false;
