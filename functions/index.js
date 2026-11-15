@@ -9,6 +9,7 @@ initializeApp();
 Object.assign(exports, require("./declaration-callables"));
 Object.assign(exports, require("./notification-triggers"));
 Object.assign(exports, require("./registro-padron"));
+Object.assign(exports, require('./registrar-declarante'));
 
 const db = getFirestore();
 const bucket = getStorage().bucket(
@@ -403,3 +404,5 @@ exports.downloadDeclarationPdf = onCall(
     }
   }
 );
+
+Object.assign(exports, require('./eliminar-perfil'));

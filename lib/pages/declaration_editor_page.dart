@@ -1,24 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../theme/ucr_colors.dart';
 import '../models/declaration.dart';
 import '../services/declaration_service.dart';
 import '../services/validation_service.dart';
 import '../services/personal_data_validator.dart';
 import '../services/profile_service.dart';
-import 'personal_profile_page.dart';
-import 'superior_selector.dart';
 import 'appointment_page.dart';
 import 'declaration_observation_tools.dart';
 
 class EditorPage extends StatefulWidget {
   final Declaration? existing;
 
-  const EditorPage({
-    super.key,
-    this.existing,
-  });
+  const EditorPage({super.key, this.existing});
 
   @override
   State<EditorPage> createState() => _EditorPageState();
@@ -27,12 +23,7 @@ class EditorPage extends StatefulWidget {
 class _EditorPageState extends State<EditorPage> {
   final service = DeclarationService();
 
-  final fields = List.generate(
-    8,
-    (_) => TextEditingController(),
-  );
-
-  final _formKey = GlobalKey<FormState>();
+  final fields = List.generate(8, (_) => TextEditingController());
 
   final jobs = <Appointment>[];
   final external = <Appointment>[];
@@ -41,6 +32,8 @@ class _EditorPageState extends State<EditorPage> {
   bool _profileLoaded = false;
 
   String? _profileError;
+  String _periodName = "";
+  String _superiorName = "";
 
   // Los documentos anteriores conservan sus observaciones
   // hasta que se modifiquen los horarios o se solicite regenerarlas.
@@ -87,10 +80,7 @@ class _EditorPageState extends State<EditorPage> {
 
   void _syncObservations() {
     if (_automaticObservations) {
-      fields[5].text = DeclarationObservationTools.generate(
-        jobs,
-        external,
-      );
+      fields[5].text = DeclarationObservationTools.generate(jobs, external);
     }
   }
 
@@ -100,14 +90,11 @@ class _EditorPageState extends State<EditorPage> {
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
-  Future<void> _loadPersonalProfile({
-    bool useCurrentProfile = false,
-  }) async {
+  Future<void> _loadPersonalProfile({bool useCurrentProfile = false}) async {
     setState(() {
       _profileLoaded = false;
       _profileError = null;
@@ -116,6 +103,14 @@ class _EditorPageState extends State<EditorPage> {
     try {
       final data = await ProfileService().load();
 
+      if (!mounted) return;
+
+      final periodId =
+          widget.existing?.periodId ?? (data['periodId'] ?? '').toString();
+      final superiorId =
+          widget.existing?.superiorId ?? (data['superiorId'] ?? '').toString();
+      final periodName = await _displayName('periods', periodId);
+      final superiorName = await _displayName('users', superiorId);
       if (!mounted) return;
 
       setState(() {
@@ -127,37 +122,39 @@ class _EditorPageState extends State<EditorPage> {
           fields[4].text = (data['unit'] ?? '').toString();
         }
 
+        fields[6].text = periodId;
+        fields[7].text = superiorId;
+        _periodName = periodName;
+        _superiorName = superiorName;
         _profileLoaded = true;
       });
     } catch (_) {
       if (!mounted) return;
 
       setState(() {
-        _profileError = 'No se pudo cargar tu perfil. Revisá tu conexión '
+        _profileError =
+            'No se pudo cargar tu perfil. Revisá tu conexión '
             'y volvé a intentarlo.';
       });
     }
   }
 
-  Future<void> _editPersonalProfile() async {
-    await Navigator.push<void>(
-      context,
-      MaterialPageRoute(
-        builder: (_) => const PersonalProfilePage(),
-      ),
-    );
-
-    if (!mounted) return;
-
-    await _loadPersonalProfile(
-      useCurrentProfile: true,
-    );
+  Future<String> _displayName(String collection, String id) async {
+    if (id.isEmpty) return 'Sin asignar';
+    try {
+      final data =
+          (await FirebaseFirestore.instance
+                  .collection(collection)
+                  .doc(id)
+                  .get())
+              .data();
+      return (data?['name'] ?? data?['label'] ?? 'Asignado').toString();
+    } on FirebaseException {
+      return 'Asignado';
+    }
   }
 
-  String? _validatePersonalField(
-    int index,
-    String? value,
-  ) {
+  String? _validatePersonalField(int index, String? value) {
     switch (index) {
       case 0:
         return PersonalDataValidator.name(value);
@@ -180,9 +177,7 @@ class _EditorPageState extends State<EditorPage> {
     if (busy) return;
 
     if (!_profileLoaded) {
-      _showMessage(
-        'Esperá a que se carguen tus datos personales.',
-      );
+      _showMessage('Esperá a que se carguen tus datos personales.');
       return;
     }
 
@@ -197,15 +192,21 @@ class _EditorPageState extends State<EditorPage> {
       _syncObservations();
     }
 
-    fields[0].text = PersonalDataValidator.normalizeName(
-      fields[0].text,
-    );
+    fields[0].text = PersonalDataValidator.normalizeName(fields[0].text);
 
     for (final index in [1, 2, 3, 4, 5]) {
       fields[index].text = fields[index].text.trim();
     }
 
-    if (!(_formKey.currentState?.validate() ?? false)) {
+    for (var index = 0; index <= 5; index++) {
+      final error = _validatePersonalField(index, fields[index].text);
+      if (error != null) {
+        _showMessage(error);
+        return;
+      }
+    }
+    if (fields[6].text.isEmpty || fields[7].text.isEmpty) {
+      _showMessage('Falta asignar el período o el superior jerárquico.');
       return;
     }
 
@@ -240,9 +241,7 @@ class _EditorPageState extends State<EditorPage> {
       if (!mounted) return;
 
       if (!p.exists || p.data()?['enabled'] != true) {
-        throw StateError(
-          'El período indicado no está habilitado.',
-        );
+        throw StateError('El período indicado no está habilitado.');
       }
 
       if (fields[0].text.trim().isEmpty ||
@@ -289,243 +288,43 @@ class _EditorPageState extends State<EditorPage> {
     }
   }
 
-  InputDecoration _fieldStyle(
-    String label,
-    IconData icon,
-  ) {
-    return InputDecoration(
-      labelText: label,
-      prefixIcon: Icon(icon, color: UcrColors.blue),
-      filled: true,
-      fillColor: Colors.white,
-      border: OutlineInputBorder(
+  Widget _summary() {
+    final values = [
+      ('Nombre', fields[0].text),
+      ('Cédula', fields[1].text),
+      ('Correo', fields[3].text),
+      ('Teléfono', fields[2].text),
+      ('Unidad', fields[4].text),
+      ('Período', _periodName),
+      ('Superior', _superiorName),
+    ];
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: const Color(0xFFC5D5E6)),
         borderRadius: BorderRadius.circular(12),
       ),
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: 16,
-        vertical: 17,
-      ),
-    );
-  }
-
-  Widget _input(
-    int index,
-    String label,
-    IconData icon, {
-    int maxLines = 1,
-  }) {
-    return TextFormField(
-      controller: fields[index],
-      readOnly: index >= 0 && index <= 4,
-      maxLines: maxLines,
-      autovalidateMode: AutovalidateMode.onUserInteraction,
-      validator: (value) => _validatePersonalField(index, value),
-      keyboardType: index == 1
-          ? TextInputType.number
-          : index == 2
-              ? TextInputType.phone
-              : index == 3
-                  ? TextInputType.emailAddress
-                  : TextInputType.text,
-      decoration: _fieldStyle(
-        label,
-        icon,
-      ).copyWith(errorMaxLines: 3),
-    );
-  }
-
-  Widget _pair(Widget first, Widget second) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (constraints.maxWidth < 580) {
-          return Column(
-            children: [
-              first,
-              const SizedBox(height: 14),
-              second,
-            ],
-          );
-        }
-
-        return Row(
-          children: [
-            Expanded(child: first),
-            const SizedBox(width: 14),
-            Expanded(child: second),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _heading(String title, IconData icon) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Row(
+      padding: const EdgeInsets.all(18),
+      child: Wrap(
+        spacing: 24,
+        runSpacing: 12,
+        alignment: WrapAlignment.spaceBetween,
         children: [
-          Icon(icon, color: UcrColors.blue, size: 23),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: Color(0xFF123663),
-              ),
+          for (final (label, value) in values)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  label,
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                Text(value.isEmpty ? '—' : value),
+              ],
             ),
-          ),
         ],
       ),
     );
-  }
-
-  Widget _panel(List<Widget> children) {
-    return Container(
-      padding: const EdgeInsets.all(22),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF5F9FE),
-        border: Border.all(
-          color: const Color(0xFFD7E8F7),
-        ),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: children,
-      ),
-    );
-  }
-
-  Widget _periodDropdown() {
-    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection('periods')
-          .where('enabled', isEqualTo: true)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Text(
-            'No se pudieron consultar los períodos: '
-            '${snapshot.error}',
-            style: const TextStyle(color: Colors.red),
-          );
-        }
-
-        if (!snapshot.hasData) {
-          return const LinearProgressIndicator();
-        }
-
-        final docs = snapshot.data!.docs;
-        final current = fields[6].text.trim();
-
-        final available = docs.any(
-          (doc) => doc.id == current,
-        );
-
-        final items = <DropdownMenuItem<String>>[
-          if (current.isNotEmpty && !available)
-            DropdownMenuItem<String>(
-              value: current,
-              child: Text(
-                '$current (período anterior)',
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          for (final doc in docs)
-            DropdownMenuItem<String>(
-              value: doc.id,
-              child: Text(
-                (doc.data()['name'] ?? doc.data()['label'] ?? doc.id)
-                    .toString(),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-        ];
-
-        if (items.isEmpty) {
-          return const Text(
-            'No hay períodos activos disponibles.',
-          );
-        }
-
-        return DropdownButtonFormField<String>(
-          key: ValueKey('period-$current'),
-          initialValue: current.isEmpty ? null : current,
-          isExpanded: true,
-          decoration: _fieldStyle(
-            'Período activo',
-            Icons.event_available_outlined,
-          ),
-          hint: const Text('Seleccioná un período'),
-          items: items,
-          onChanged: widget.existing != null || busy
-              ? null
-              : (value) {
-                  setState(
-                    () => fields[6].text = value ?? '',
-                  );
-                },
-        );
-      },
-    );
-  }
-
-  Widget _observationsPanel() {
-    final error =
-        _automaticObservations ? DeclarationObservationTools.firstError(jobs) : null;
-
-    return _panel([
-      _heading(
-        'Observaciones de la declaración',
-        Icons.notes_outlined,
-      ),
-      Text(
-        _automaticObservations
-            ? 'El resumen se genera a partir de los cursos, '
-                'actividades y horarios declarados.'
-            : 'Se conservan las observaciones del borrador anterior. '
-                'Al modificar sus horarios, el resumen se generará '
-                'automáticamente.',
-      ),
-      if (!_automaticObservations)
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            onPressed: busy
-                ? null
-                : () {
-                    setState(_activitiesChanged);
-                  },
-            icon: const Icon(Icons.auto_awesome_outlined),
-            label: const Text('Generar desde los horarios'),
-          ),
-        ),
-      const SizedBox(height: 12),
-      TextFormField(
-        controller: fields[5],
-        readOnly: true,
-        minLines: 4,
-        maxLines: 12,
-        validator: PersonalDataValidator.observations,
-        decoration: _fieldStyle(
-          'Resumen de horarios',
-          Icons.description_outlined,
-        ).copyWith(
-          hintText: 'Agregá nombramientos para generar el resumen.',
-          errorMaxLines: 3,
-        ),
-      ),
-      if (error != null) ...[
-        const SizedBox(height: 10),
-        Text(
-          error,
-          style: const TextStyle(
-            color: Colors.deepOrange,
-          ),
-        ),
-      ],
-    ]);
   }
 
   @override
@@ -541,226 +340,215 @@ class _EditorPageState extends State<EditorPage> {
       ),
       body: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 980),
-          child: Form(
-            key: _formKey,
-            child: ListView(
-              padding: const EdgeInsets.all(22),
-              children: [
-                const Text(
-                  'Datos de la declaración',
-                  style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF123663),
-                  ),
+          constraints: const BoxConstraints(maxWidth: 1360),
+          child: ListView(
+            padding: const EdgeInsets.all(14),
+            children: [
+              const Text(
+                'Datos de la declaración',
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF123663),
                 ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Completá la información y agregá tus horarios.',
-                  style: TextStyle(
-                    color: Color(0xFF55749A),
-                  ),
+              ),
+              const SizedBox(height: 20),
+              if (!_profileLoaded && _profileError == null)
+                const LinearProgressIndicator(),
+              if (_profileError != null)
+                TextButton(
+                  onPressed: busy ? null : () => _loadPersonalProfile(),
+                  child: Text('$_profileError Reintentar'),
                 ),
-                const SizedBox(height: 22),
-                _panel([
-                  _heading(
-                    'Información personal',
-                    Icons.person_outline,
-                  ),
-                  if (!_profileLoaded && _profileError == null)
-                    const LinearProgressIndicator(),
-                  if (_profileError != null) ...[
-                    Text(
-                      _profileError!,
-                      style: const TextStyle(
-                        color: Colors.red,
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: busy ? null : () => _loadPersonalProfile(),
-                      child: const Text(
-                        'Reintentar carga del perfil',
-                      ),
-                    ),
-                  ],
-                  const Text(
-                    'Los datos se completan desde tu perfil. '
-                    'Podés actualizarlos allí; la cédula '
-                    'guardada no se puede cambiar.',
-                  ),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      onPressed:
-                          busy || !_profileLoaded ? null : _editPersonalProfile,
-                      icon: const Icon(
-                        Icons.manage_accounts_outlined,
-                      ),
-                      label: Text(
-                        widget.existing == null
-                            ? 'Completar o editar mis datos'
-                            : 'Editar perfil y usar sus datos actuales',
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  _pair(
-                    _input(
-                      0,
-                      'Nombre completo',
-                      Icons.person_outline,
-                    ),
-                    _input(
-                      1,
-                      'Identificación',
-                      Icons.credit_card_outlined,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  _pair(
-                    _input(
-                      3,
-                      'Correo electrónico',
-                      Icons.mail_outline,
-                    ),
-                    _input(
-                      2,
-                      'Teléfono',
-                      Icons.phone_outlined,
-                    ),
-                  ),
-                ]),
-                const SizedBox(height: 16),
-                _panel([
-                  _heading(
-                    'Información institucional',
-                    Icons.account_balance_outlined,
-                  ),
-                  _input(
-                    4,
-                    'Unidad académica o administrativa',
-                    Icons.apartment_outlined,
-                  ),
-                  const SizedBox(height: 14),
-                  _pair(
-                    _periodDropdown(),
-                    SuperiorSelector(
-                      controller: fields[7],
-                      enabled: widget.existing == null && !busy,
-                    ),
-                  ),
-                ]),
-                const SizedBox(height: 16),
-                section(
-                  'Nombramientos',
-                  jobs,
-                  false,
-                ),
-                const SizedBox(height: 12),
-                section(
-                  'Otras instituciones',
-                  external,
-                  true,
-                ),
-                const SizedBox(height: 16),
-                _observationsPanel(),
-                const SizedBox(height: 12),
-                Builder(
-                  builder: (ctx) {
-                    final result = ValidationService.validate(
-                      jobs,
-                      external,
-                    );
+              _summary(),
+              const SizedBox(height: 20),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final internalCard = _pendingAppointments();
+                  final externalCard = section(
+                    'Otras instituciones',
+                    external,
+                    true,
+                  );
+                  if (constraints.maxWidth < 640) {
+                    return Column(children: [internalCard, externalCard]);
+                  }
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: internalCard),
+                      const SizedBox(width: 16),
+                      Expanded(child: externalCard),
+                    ],
+                  );
+                },
+              ),
+              const SizedBox(height: 24),
+              Wrap(
+                alignment: WrapAlignment.end,
+                spacing: 12,
+                runSpacing: 8,
+                children: [
+                  OutlinedButton.icon(
+                    onPressed: busy
+                        ? null
+                        : () async {
+                            final resultado = ValidationService.validate(
+                              jobs,
+                              external,
+                            );
 
-                    return Card(
-                      elevation: 0,
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Horas institucionales: '
-                              '${result.institutionalHours.toStringAsFixed(2)} / '
-                              '${result.expectedHours.toStringAsFixed(2)} '
-                              'esperadas',
-                            ),
-                            Text(
-                              'Horas externas: '
-                              '${result.externalHours.toStringAsFixed(2)}',
-                            ),
-                            ...result.errors.map(
-                              (e) => Text(
-                                '• $e',
-                                style: const TextStyle(
-                                  color: Colors.deepOrange,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 16),
-                                OutlinedButton.icon(
-                  onPressed: busy
-                      ? null
-                      : () async {
-                          final resultado = ValidationService.validate(
-                            jobs,
-                            external,
-                          );
-
-                          await showDialog<void>(
-                            context: context,
-                            builder: (dialogContext) => AlertDialog(
-                              title: Text(
-                                resultado.valid
-                                    ? 'Horario sin errores'
-                                    : 'Revisá el horario',
-                              ),
-                              content: SingleChildScrollView(
-                                child: Text(
+                            await showDialog<void>(
+                              context: context,
+                              builder: (dialogContext) => AlertDialog(
+                                title: Text(
                                   resultado.valid
-                                      ? 'Podés continuar y guardar el borrador.'
-                                      : resultado.errors.join('\n\n'),
+                                      ? 'Horario sin errores'
+                                      : 'Revisá el horario',
                                 ),
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () =>
-                                      Navigator.of(dialogContext).pop(),
+                                content: SingleChildScrollView(
                                   child: Text(
                                     resultado.valid
-                                        ? 'Continuar'
-                                        : 'Volver a editar',
+                                        ? 'Podés continuar y guardar el borrador.'
+                                        : resultado.errors.join('\n\n'),
                                   ),
                                 ),
-                              ],
-                            ),
-                          );
-                        },
-                  icon: const Icon(Icons.rule),
-                  label: const Text('Revisar horario'),
-                ),
-                const SizedBox(height: 8),
-
-                FilledButton.icon(
-                  onPressed: busy || !_profileLoaded ? null : save,
-                  icon: const Icon(Icons.save_outlined),
-                  label: Text(
-                    busy ? 'Guardando...' : 'Guardar borrador',
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.of(dialogContext).pop(),
+                                    child: Text(
+                                      resultado.valid
+                                          ? 'Continuar'
+                                          : 'Volver a editar',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                    icon: const Icon(Icons.rule),
+                    label: const Text('Revisar horario'),
                   ),
-                ),
-              ],
-            ),
+                  FilledButton.icon(
+                    onPressed: busy || !_profileLoaded ? null : save,
+                    icon: const Icon(Icons.save_outlined),
+                    label: Text(busy ? 'Guardando...' : 'Guardar borrador'),
+                  ),
+                ],
+              ),
+            ],
           ),
         ),
       ),
     );
+  }
+
+  final _editedAssignments = <String, Appointment>{};
+
+  Widget _pendingAppointments() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    final period = fields[6].text.trim();
+    return Card(
+      color: Colors.white,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: Color(0xFFC5D5E6)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Nombramientos',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const Divider(),
+            if (uid != null && period.isNotEmpty)
+              StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                stream: FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(uid)
+                    .collection('pendingAppointments')
+                    .where('periodId', isEqualTo: period)
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (snapshot.hasError) {
+                    return const Text(
+                      'No se pudieron cargar los nombramientos.',
+                    );
+                  }
+                  if (!snapshot.hasData) return const LinearProgressIndicator();
+                  final docs = snapshot.data!.docs;
+                  if (docs.isEmpty && jobs.isEmpty) {
+                    return const Text('No tienes declaraciones pendientes');
+                  }
+                  return Column(
+                    children: [
+                      for (final doc in docs) _assignmentRow(doc),
+                      for (final job in jobs)
+                        if (!_editedAssignments.containsValue(job))
+                          ListTile(
+                            title: Text(job.position),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: busy ? null : () => _editAssigned(job),
+                          ),
+                    ],
+                  );
+                },
+              )
+            else if (!_profileLoaded && _profileError == null)
+              const LinearProgressIndicator()
+            else
+              const Text('No tienes declaraciones pendientes'),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _assignmentRow(QueryDocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data();
+    final appointment = Appointment.fromMap(data);
+    final edited = _editedAssignments[doc.id];
+    return ListTile(
+      title: Text(appointment.position),
+      subtitle: Text(
+        "${data['unit'] ?? fields[4].text} · "
+        "${appointment.expectedHours} h semanales · $_periodName",
+      ),
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(edited == null ? 'Pendiente' : 'En edición'),
+          const SizedBox(width: 8),
+          const Icon(Icons.chevron_right),
+        ],
+      ),
+      onTap: busy
+          ? null
+          : () => _editAssigned(edited ?? appointment, id: doc.id),
+    );
+  }
+
+  Future<void> _editAssigned(Appointment appointment, {String? id}) async {
+    final edited = await _openAppointment(
+      isExternal: false,
+      existing: appointment,
+    );
+    if (!mounted || edited == null) return;
+    setState(() {
+      final index = jobs.indexOf(appointment);
+      if (index < 0) {
+        jobs.add(edited);
+      } else {
+        jobs[index] = edited;
+      }
+      if (id != null) _editedAssignments[id] = edited;
+      _activitiesChanged();
+    });
   }
 
   Future<Appointment?> _openAppointment({
@@ -772,20 +560,27 @@ class _EditorPageState extends State<EditorPage> {
       MaterialPageRoute(
         builder: (_) => AppointmentPage(
           existing: existing,
-          institutionalWorkplace:
-              isExternal ? null : 'Universidad de Costa Rica',
+          lockAssignment: !isExternal,
+          otherAppointments: [
+            for (final appointment in [...jobs, ...external])
+              if (!identical(appointment, existing)) appointment,
+          ],
+          institutionalWorkplace: isExternal
+              ? null
+              : 'Universidad de Costa Rica',
         ),
       ),
     );
   }
 
-  Widget section(
-    String title,
-    List<Appointment> list,
-    bool isExternal,
-  ) {
+  Widget section(String title, List<Appointment> list, bool isExternal) {
     return Card(
       elevation: 0,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: Color(0xFFC5D5E6)),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
@@ -799,7 +594,7 @@ class _EditorPageState extends State<EditorPage> {
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                 ),
-                FilledButton.tonalIcon(
+                OutlinedButton.icon(
                   onPressed: busy
                       ? null
                       : () async {
@@ -819,6 +614,11 @@ class _EditorPageState extends State<EditorPage> {
                 ),
               ],
             ),
+            if (list.isEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 18, bottom: 12),
+                child: Text(isExternal ? '' : 'No tienes nada por declarar'),
+              ),
             for (var i = 0; i < list.length; i++)
               ListTile(
                 title: Text(list[i].workplace),
@@ -879,4 +679,3 @@ class _EditorPageState extends State<EditorPage> {
 // ============================================================
 // FORMULARIO DE NOMBRAMIENTOS Y BLOQUES
 // ============================================================
-

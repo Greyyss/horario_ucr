@@ -1,3 +1,4 @@
+import 'registrar_declarante_page.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -1420,6 +1421,17 @@ class _DashboardState extends State<Dashboard> {
                         () => setState(() => _section = 'inicio'),
                         selected: _section == 'inicio',
                       ),
+                      if (role == 'superior')
+                        _sideItem(
+                          'Registrar declarante',
+                          Icons.person_add_outlined,
+                          () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const RegistrarDeclarantePage(),
+                            ),
+                          ),
+                        ),
                       if (role == 'declarante')
                         _sideItem(
                           'Nueva declaración',
@@ -1541,6 +1553,10 @@ class _DashboardState extends State<Dashboard> {
   Widget build(BuildContext context) {
     final uid = FirebaseAuth.instance.currentUser!.uid;
     final width = MediaQuery.sizeOf(context).width;
+
+    if (!loading && role == 'admin') {
+      return const AdminPage(isHome: true);
+    }
 
     return Scaffold(
       backgroundColor: UcrColors.background,
@@ -2193,7 +2209,7 @@ class _DashboardState extends State<Dashboard> {
           ),
           SizedBox(height: 6),
           Text(
-            'Versión 1.0.0',
+            'Versión 1.1.0',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: Color(0xFF279D92),
@@ -2224,4 +2240,3 @@ class _DashboardState extends State<Dashboard> {
 // ============================================================
 // DATOS DE ACTIVIDADES Y GENERACIÓN DE OBSERVACIONES
 // ============================================================
-
