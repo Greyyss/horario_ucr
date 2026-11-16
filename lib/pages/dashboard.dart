@@ -1,3 +1,4 @@
+import 'mis_declarantes_page.dart';
 import 'registrar_declarante_page.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -1179,9 +1180,11 @@ class _DashboardState extends State<Dashboard> {
     return raw.isEmpty ? 'Usuario' : raw.split(RegExp(r'\s+')).first;
   }
 
+  bool get _compactSuperiorHome => role == 'superior' && _section == 'inicio';
+
   Widget _welcomeBanner() {
     return Container(
-      height: 236,
+      height: _compactSuperiorHome ? 200 : 236,
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(13),
@@ -1213,9 +1216,9 @@ class _DashboardState extends State<Dashboard> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.symmetric(
+                padding: EdgeInsets.symmetric(
                   horizontal: 28,
-                  vertical: 24,
+                  vertical: _compactSuperiorHome ? 14 : 24,
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1423,6 +1426,17 @@ class _DashboardState extends State<Dashboard> {
                       ),
                       if (role == 'superior')
                         _sideItem(
+                          'Mis declarantes',
+                          Icons.people_outline,
+                          () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const MisDeclarantesPage(),
+                            ),
+                          ),
+                        ),
+                      if (role == 'superior')
+                        _sideItem(
                           'Registrar declarante',
                           Icons.person_add_outlined,
                           () => Navigator.push(
@@ -1489,26 +1503,27 @@ class _DashboardState extends State<Dashboard> {
                 ),
 
                 // Pie de la barra lateral.
-                Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: _sidebarExpanded
-                      ? const Text(
-                          'Universidad de Costa Rica',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
+                if (role != 'superior')
+                  Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: _sidebarExpanded
+                        ? const Text(
+                            'Universidad de Costa Rica',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                            ),
+                          )
+                        : const Tooltip(
+                            message: 'Universidad de Costa Rica',
+                            child: Icon(
+                              Icons.account_balance_outlined,
+                              color: Colors.white,
+                              size: 24,
+                            ),
                           ),
-                        )
-                      : const Tooltip(
-                          message: 'Universidad de Costa Rica',
-                          child: Icon(
-                            Icons.account_balance_outlined,
-                            color: Colors.white,
-                            size: 24,
-                          ),
-                        ),
-                ),
+                  ),
               ],
             ),
           ),
@@ -1564,13 +1579,13 @@ class _DashboardState extends State<Dashboard> {
         backgroundColor: Colors.white,
         foregroundColor: UcrColors.blue,
         elevation: 0,
-        toolbarHeight: width < 600 ? 78 : 100,
+        toolbarHeight: _compactSuperiorHome ? 76 : (width < 600 ? 78 : 100),
         titleSpacing: 16,
         title: Align(
           alignment: Alignment.centerLeft,
           child: Image.asset(
             'assets/images/logo_declara_ucr.png',
-            height: width < 600 ? 55 : 70,
+            height: _compactSuperiorHome ? 52 : (width < 600 ? 55 : 70),
             fit: BoxFit.contain,
             alignment: Alignment.centerLeft,
           ),
@@ -1683,470 +1698,593 @@ class _DashboardState extends State<Dashboard> {
 
                 final compact = width < 780;
 
-                final content = ListView(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: width < 600 ? 14 : 24,
-                    vertical: 24,
-                  ),
-                  children: [
-                    if (width < 920) ...[
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
+                final pinSuperiorFooter = _compactSuperiorHome;
+                final contentPadding = EdgeInsets.fromLTRB(
+                  width < 600 ? 14 : 24,
+                  pinSuperiorFooter ? 12 : 24,
+                  width < 600 ? 14 : 24,
+                  pinSuperiorFooter ? 0 : 24,
+                );
+                final contentChildren = <Widget>[
+                  if (width < 920) ...[
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          TextButton.icon(
+                            onPressed: () => setState(
+                              () => _section = 'inicio',
+                            ),
+                            icon: const Icon(
+                              Icons.home_outlined,
+                            ),
+                            label: const Text('Inicio'),
+                          ),
+                          if (role == 'declarante')
+                            TextButton.icon(
+                              onPressed: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => const EditorPage(),
+                                ),
+                              ),
+                              icon: const Icon(Icons.add),
+                              label: const Text(
+                                'Nueva declaración',
+                              ),
+                            ),
+                          TextButton.icon(
+                            onPressed: () => setState(
+                              () => _section = 'declaraciones',
+                            ),
+                            icon: const Icon(
+                              Icons.description_outlined,
+                            ),
+                            label: const Text(
+                              'Declaraciones',
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: () => _chooseHistory(list),
+                            icon: const Icon(
+                              Icons.history,
+                            ),
+                            label: const Text(
+                              'Seguimiento',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  if (_section != 'inicio') ...[
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: () => setState(
+                          () => _section = 'inicio',
+                        ),
+                        icon: const Icon(
+                          Icons.arrow_back,
+                        ),
+                        label: const Text(
+                          'Volver al inicio',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                  ],
+                  if (_section == 'inicio') ...[
+                    _welcomeBanner(),
+                    SizedBox(height: _compactSuperiorHome ? 12 : 18),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final available = constraints.maxWidth;
+
+                        final columns = available >= 720
+                            ? 4
+                            : available >= 480
+                                ? 2
+                                : 1;
+
+                        final cardWidth =
+                            (available - (columns - 1) * 12) / columns;
+
+                        final draft = list
+                            .where(
+                              (d) => d.status == 'BORRADOR',
+                            )
+                            .length;
+
+                        return Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
                           children: [
-                            TextButton.icon(
-                              onPressed: () => setState(
-                                () => _section = 'inicio',
-                              ),
-                              icon: const Icon(
-                                Icons.home_outlined,
-                              ),
-                              label: const Text('Inicio'),
-                            ),
-                            if (role == 'declarante')
-                              TextButton.icon(
-                                onPressed: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) => const EditorPage(),
-                                  ),
-                                ),
-                                icon: const Icon(Icons.add),
-                                label: const Text(
-                                  'Nueva declaración',
-                                ),
-                              ),
-                            TextButton.icon(
-                              onPressed: () => setState(
-                                () => _section = 'declaraciones',
-                              ),
-                              icon: const Icon(
+                            SizedBox(
+                              width: cardWidth,
+                              child: _summary(
+                                'Total de declaraciones',
+                                list.length,
                                 Icons.description_outlined,
-                              ),
-                              label: const Text(
-                                'Declaraciones',
+                                const Color(0xFF005DA4),
                               ),
                             ),
-                            TextButton.icon(
-                              onPressed: () => _chooseHistory(list),
-                              icon: const Icon(
-                                Icons.history,
+                            SizedBox(
+                              width: cardWidth,
+                              child: _summary(
+                                'Pendientes',
+                                pending,
+                                Icons.schedule_outlined,
+                                const Color(0xFF2B91D4),
                               ),
-                              label: const Text(
-                                'Seguimiento',
+                            ),
+                            SizedBox(
+                              width: cardWidth,
+                              child: _summary(
+                                'Finalizadas',
+                                finished,
+                                Icons.check_circle_outline,
+                                const Color(0xFF0087B9),
+                              ),
+                            ),
+                            SizedBox(
+                              width: cardWidth,
+                              child: _summary(
+                                'Borrador',
+                                draft,
+                                Icons.edit_note_outlined,
+                                const Color(0xFF416C9E),
                               ),
                             ),
                           ],
-                        ),
+                        );
+                      },
+                    ),
+                    SizedBox(height: _compactSuperiorHome ? 14 : 24),
+                    const Text(
+                      'Accesos principales',
+                      style: TextStyle(
+                        color: Color(0xFF07194D),
+                        fontSize: 24,
+                        fontWeight: FontWeight.w800,
                       ),
-                      const SizedBox(height: 12),
-                    ],
-                    if (_section != 'inicio') ...[
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton.icon(
-                          onPressed: () => setState(
-                            () => _section = 'inicio',
-                          ),
-                          icon: const Icon(
-                            Icons.arrow_back,
-                          ),
-                          label: const Text(
-                            'Volver al inicio',
-                          ),
-                        ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Seleccioná la opción que deseás realizar.',
+                      style: TextStyle(
+                        color: Color(0xFF5476A4),
+                        fontSize: 14,
                       ),
-                      const SizedBox(height: 14),
-                    ],
-                    if (_section == 'inicio') ...[
-                      _welcomeBanner(),
-                      const SizedBox(height: 18),
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          final available = constraints.maxWidth;
+                    ),
+                    const SizedBox(height: 12),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final available = constraints.maxWidth;
 
-                          final columns = available >= 720
-                              ? 4
-                              : available >= 480
-                                  ? 2
-                                  : 1;
+                        final columns = available >= 760
+                            ? 3
+                            : available >= 510
+                                ? 2
+                                : 1;
 
-                          final cardWidth =
-                              (available - (columns - 1) * 12) / columns;
+                        final cardWidth =
+                            (available - (columns - 1) * 16) / columns;
 
-                          final draft = list
-                              .where(
-                                (d) => d.status == 'BORRADOR',
-                              )
-                              .length;
-
-                          return Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            children: [
-                              SizedBox(
-                                width: cardWidth,
-                                child: _summary(
-                                  'Total de declaraciones',
-                                  list.length,
-                                  Icons.description_outlined,
-                                  const Color(0xFF005DA4),
-                                ),
-                              ),
-                              SizedBox(
-                                width: cardWidth,
-                                child: _summary(
-                                  'Pendientes',
-                                  pending,
-                                  Icons.schedule_outlined,
-                                  const Color(0xFF2B91D4),
-                                ),
-                              ),
-                              SizedBox(
-                                width: cardWidth,
-                                child: _summary(
-                                  'Finalizadas',
-                                  finished,
-                                  Icons.check_circle_outline,
-                                  const Color(0xFF0087B9),
-                                ),
-                              ),
-                              SizedBox(
-                                width: cardWidth,
-                                child: _summary(
-                                  'Borrador',
-                                  draft,
-                                  Icons.edit_note_outlined,
-                                  const Color(0xFF416C9E),
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 24),
-                      const Text(
-                        'Accesos principales',
-                        style: TextStyle(
-                          color: Color(0xFF07194D),
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Seleccioná la opción que deseás realizar.',
-                        style: TextStyle(
-                          color: Color(0xFF5476A4),
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          final available = constraints.maxWidth;
-
-                          final columns = available >= 760
-                              ? 3
-                              : available >= 510
-                                  ? 2
-                                  : 1;
-
-                          final cardWidth =
-                              (available - (columns - 1) * 16) / columns;
-
-                          return Wrap(
-                            spacing: 16,
-                            runSpacing: 16,
-                            alignment: WrapAlignment.center,
-                            children: [
-                              if (role == 'declarante')
-                                SizedBox(
-                                  width: cardWidth,
-                                  child: _quickCard(
-                                    'Nueva declaración',
-                                    'Registrar un nuevo horario',
-                                    Icons.note_add_outlined,
-                                    () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => const EditorPage(),
-                                      ),
+                        if (role == 'superior') {
+                          final accesses = <(String, IconData, VoidCallback)>[
+                            (
+                              'Nueva declaración',
+                              Icons.note_add_outlined,
+                              () => Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
+                                      builder: (_) =>
+                                          const NuevaDeclaracionSuperiorPage(),
                                     ),
                                   ),
-                                ),
-                              SizedBox(
-                                width: cardWidth,
-                                child: _quickCard(
-                                  'Mis declaraciones',
-                                  'Consultar y gestionar trámites',
-                                  Icons.description_outlined,
-                                  () => setState(
-                                    () => _section = 'declaraciones',
-                                  ),
-                                ),
-                              ),
-                              SizedBox(
-                                width: cardWidth,
-                                child: _quickCard(
-                                  'Seguimiento',
-                                  'Ver el historial de movimientos',
-                                  Icons.track_changes_outlined,
-                                  () => _chooseHistory(list),
-                                ),
-                              ),
-                              if (role == 'admin')
-                                SizedBox(
-                                  width: cardWidth,
-                                  child: _quickCard(
-                                    'Administración',
-                                    'Gestionar el sistema',
-                                    Icons.admin_panel_settings_outlined,
-                                    () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => const AdminPage(),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 34),
-                      buildInstitutionalFooter(),
-                    ] else ...[
-                      Text(
-                        role == 'declarante'
-                            ? 'Mis declaraciones'
-                            : 'Declaraciones',
-                        style: Theme.of(context)
-                            .textTheme
-                            .headlineMedium
-                            ?.copyWith(
-                              fontWeight: FontWeight.w800,
-                              color: UcrColors.text,
                             ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        'Consulte, filtre y gestione sus trámites.',
-                        style: TextStyle(
-                          color: Color(0xFF64748B),
-                          fontSize: 15,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      LayoutBuilder(
-                        builder: (context, constraints) {
-                          final columns = constraints.maxWidth >= 760
-                              ? 3
-                              : constraints.maxWidth >= 490
-                                  ? 2
-                                  : 1;
-
-                          final cardWidth =
-                              (constraints.maxWidth - (columns - 1) * 12) /
-                                  columns;
-
-                          return Wrap(
-                            spacing: 12,
-                            runSpacing: 12,
-                            children: [
-                              SizedBox(
-                                width: cardWidth,
-                                child: _summary(
-                                  'Total de declaraciones',
-                                  list.length,
-                                  Icons.description_outlined,
-                                  const Color(0xFF005DA4),
-                                ),
-                              ),
-                              SizedBox(
-                                width: cardWidth,
-                                child: _summary(
-                                  'Pendientes',
-                                  pending,
-                                  Icons.schedule_outlined,
-                                  const Color(0xFF248BD2),
-                                ),
-                              ),
-                              SizedBox(
-                                width: cardWidth,
-                                child: _summary(
-                                  'Finalizadas',
-                                  finished,
-                                  Icons.check_circle_outline,
-                                  const Color(0xFF426F9F),
-                                ),
-                              ),
-                            ],
-                          );
-                        },
-                      ),
-                      const SizedBox(height: 24),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          border: Border.all(
-                            color: UcrColors.border,
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        clipBehavior: Clip.antiAlias,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.all(18),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Row(
-                                    children: [
-                                      Icon(
-                                        Icons.folder_open_outlined,
-                                        color: UcrColors.blue,
-                                        size: 22,
-                                      ),
-                                      SizedBox(width: 9),
-                                      Text(
-                                        'Trámites registrados',
-                                        style: TextStyle(
-                                          fontSize: 19,
-                                          fontWeight: FontWeight.w700,
-                                          color: UcrColors.text,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    '${filtered.length} de '
-                                    '${list.length} declaraciones',
-                                    style: const TextStyle(
-                                      color: Color(0xFF687789),
-                                      fontSize: 12,
+                            (
+                              'Registrar declarante',
+                              Icons.person_add_outlined,
+                              () => Navigator.of(context).push(
+                                    MaterialPageRoute<void>(
+                                      builder: (_) =>
+                                          const RegistrarDeclarantePage(),
                                     ),
                                   ),
-                                  const SizedBox(height: 15),
-                                  Wrap(
-                                    spacing: 10,
-                                    runSpacing: 10,
-                                    crossAxisAlignment:
-                                        WrapCrossAlignment.center,
-                                    children: [
-                                      SizedBox(
-                                        width: compact ? 260 : 330,
-                                        child: TextField(
-                                          onChanged: (value) => setState(
-                                            () => _search = value,
-                                          ),
-                                          decoration: const InputDecoration(
-                                            isDense: true,
-                                            prefixIcon: Icon(Icons.search),
-                                            hintText:
-                                                'Buscar por nombre, período o unidad',
-                                            border: OutlineInputBorder(),
-                                          ),
+                            ),
+                            (
+                              'Declaraciones',
+                              Icons.description_outlined,
+                              () => setState(() => _section = 'declaraciones'),
+                            ),
+                            (
+                              'Seguimiento',
+                              Icons.track_changes_outlined,
+                              () => _chooseHistory(list),
+                            ),
+                          ];
+
+                          return LayoutBuilder(
+                            builder: (context, constraints) {
+                              const gap = 12.0;
+                              final columns =
+                                  constraints.maxWidth >= 760 ? 4 : 2;
+                              final cardWidth =
+                                  (constraints.maxWidth - gap * (columns - 1)) /
+                                      columns;
+
+                              return Wrap(
+                                spacing: gap,
+                                runSpacing: gap,
+                                children: [
+                                  for (final (title, icon, onTap) in accesses)
+                                    SizedBox(
+                                      width: cardWidth,
+                                      child: Material(
+                                        color: Colors.white,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                          side: const BorderSide(
+                                              color: Color(0xFFD2E0ED)),
                                         ),
-                                      ),
-                                      SizedBox(
-                                        width: 210,
-                                        child: DropdownButtonFormField<String>(
-                                          initialValue: selectedStatus,
-                                          isExpanded: true,
-                                          decoration: const InputDecoration(
-                                            isDense: true,
-                                            labelText: 'Estado',
-                                            border: OutlineInputBorder(),
-                                          ),
-                                          items: [
-                                            const DropdownMenuItem<String>(
-                                              value: 'TODOS',
-                                              child: Text(
-                                                'Todos los estados',
+                                        clipBehavior: Clip.antiAlias,
+                                        child: InkWell(
+                                          onTap: onTap,
+                                          child: ConstrainedBox(
+                                            constraints: const BoxConstraints(
+                                                minHeight: 84),
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(14),
+                                              child: Row(
+                                                children: [
+                                                  Icon(icon,
+                                                      size: 22,
+                                                      color: UcrColors.blue),
+                                                  const SizedBox(width: 10),
+                                                  Expanded(
+                                                    child: Text(
+                                                      title,
+                                                      style: const TextStyle(
+                                                        fontSize: 14,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                        color:
+                                                            Color(0xFF153454),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
                                               ),
                                             ),
-                                            for (final status in statuses)
-                                              DropdownMenuItem<String>(
-                                                value: status,
-                                                child: Text(
-                                                  _statusLabel(
-                                                    status,
-                                                  ),
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                          ],
-                                          onChanged: (value) => setState(
-                                            () => _statusFilter =
-                                                value ?? 'TODOS',
                                           ),
                                         ),
                                       ),
-                                      OutlinedButton.icon(
-                                        onPressed: () => setState(
-                                          () => _newestFirst = !_newestFirst,
-                                        ),
-                                        icon: Icon(
-                                          _newestFirst
-                                              ? Icons.arrow_downward
-                                              : Icons.arrow_upward,
-                                          size: 17,
-                                        ),
-                                        label: Text(
-                                          _newestFirst
-                                              ? 'Más recientes'
-                                              : 'Más antiguos',
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                                    ),
                                 ],
+                              );
+                            },
+                          );
+                        }
+
+                        return Wrap(
+                          spacing: 16,
+                          runSpacing: 16,
+                          alignment: WrapAlignment.center,
+                          children: [
+                            if (role == 'declarante')
+                              SizedBox(
+                                width: cardWidth,
+                                child: _quickCard(
+                                  'Nueva declaración',
+                                  'Registrar un nuevo horario',
+                                  Icons.note_add_outlined,
+                                  () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const EditorPage(),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            SizedBox(
+                              width: cardWidth,
+                              child: _quickCard(
+                                'Mis declaraciones',
+                                'Consultar y gestionar trámites',
+                                Icons.description_outlined,
+                                () => setState(
+                                  () => _section = 'declaraciones',
+                                ),
                               ),
                             ),
-                            if (snapshot.hasError)
-                              _message(
-                                'No fue posible cargar las '
-                                'declaraciones: ${snapshot.error}',
-                              )
-                            else if (!snapshot.hasData)
-                              const Padding(
-                                padding: EdgeInsets.all(36),
-                                child: Center(
-                                  child: CircularProgressIndicator(),
+                            SizedBox(
+                              width: cardWidth,
+                              child: _quickCard(
+                                'Seguimiento',
+                                'Ver el historial de movimientos',
+                                Icons.track_changes_outlined,
+                                () => _chooseHistory(list),
+                              ),
+                            ),
+                            if (role == 'admin')
+                              SizedBox(
+                                width: cardWidth,
+                                child: _quickCard(
+                                  'Administración',
+                                  'Gestionar el sistema',
+                                  Icons.admin_panel_settings_outlined,
+                                  () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => const AdminPage(),
+                                    ),
+                                  ),
                                 ),
-                              )
-                            else if (list.isEmpty)
-                              _message(
-                                'No hay declaraciones disponibles '
-                                'para este usuario.',
-                              )
-                            else if (filtered.isEmpty)
-                              _message(
-                                'No hay trámites que coincidan '
-                                'con los filtros.',
-                              )
-                            else ...[
-                              if (!compact) _tableHeader(),
-                              for (final d in filtered)
-                                if (compact)
-                                  _mobileRow(d, uid)
-                                else
-                                  _tableRow(d, uid),
-                            ],
+                              ),
                           ],
-                        ),
+                        );
+                      },
+                    ),
+                    SizedBox(height: _compactSuperiorHome ? 12 : 34),
+                    if (!pinSuperiorFooter) buildInstitutionalFooter(),
+                  ] else ...[
+                    Text(
+                      role == 'declarante'
+                          ? 'Mis declaraciones'
+                          : 'Declaraciones',
+                      style:
+                          Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                color: UcrColors.text,
+                              ),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'Consulte, filtre y gestione sus trámites.',
+                      style: TextStyle(
+                        color: Color(0xFF64748B),
+                        fontSize: 15,
                       ),
-                      const SizedBox(height: 24),
-                      buildInstitutionalFooter(),
-                    ],
-                    const SizedBox(height: 72),
+                    ),
+                    const SizedBox(height: 20),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final columns = constraints.maxWidth >= 760
+                            ? 3
+                            : constraints.maxWidth >= 490
+                                ? 2
+                                : 1;
+
+                        final cardWidth =
+                            (constraints.maxWidth - (columns - 1) * 12) /
+                                columns;
+
+                        return Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: [
+                            SizedBox(
+                              width: cardWidth,
+                              child: _summary(
+                                'Total de declaraciones',
+                                list.length,
+                                Icons.description_outlined,
+                                const Color(0xFF005DA4),
+                              ),
+                            ),
+                            SizedBox(
+                              width: cardWidth,
+                              child: _summary(
+                                'Pendientes',
+                                pending,
+                                Icons.schedule_outlined,
+                                const Color(0xFF248BD2),
+                              ),
+                            ),
+                            SizedBox(
+                              width: cardWidth,
+                              child: _summary(
+                                'Finalizadas',
+                                finished,
+                                Icons.check_circle_outline,
+                                const Color(0xFF426F9F),
+                              ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        border: Border.all(
+                          color: UcrColors.border,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Row(
+                                  children: [
+                                    Icon(
+                                      Icons.folder_open_outlined,
+                                      color: UcrColors.blue,
+                                      size: 22,
+                                    ),
+                                    SizedBox(width: 9),
+                                    Text(
+                                      'Trámites registrados',
+                                      style: TextStyle(
+                                        fontSize: 19,
+                                        fontWeight: FontWeight.w700,
+                                        color: UcrColors.text,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  '${filtered.length} de '
+                                  '${list.length} declaraciones',
+                                  style: const TextStyle(
+                                    color: Color(0xFF687789),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                const SizedBox(height: 15),
+                                Wrap(
+                                  spacing: 10,
+                                  runSpacing: 10,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    SizedBox(
+                                      width: compact ? 260 : 330,
+                                      child: TextField(
+                                        onChanged: (value) => setState(
+                                          () => _search = value,
+                                        ),
+                                        decoration: const InputDecoration(
+                                          isDense: true,
+                                          prefixIcon: Icon(Icons.search),
+                                          hintText:
+                                              'Buscar por nombre, período o unidad',
+                                          border: OutlineInputBorder(),
+                                        ),
+                                      ),
+                                    ),
+                                    SizedBox(
+                                      width: 210,
+                                      child: DropdownButtonFormField<String>(
+                                        initialValue: selectedStatus,
+                                        isExpanded: true,
+                                        decoration: const InputDecoration(
+                                          isDense: true,
+                                          labelText: 'Estado',
+                                          border: OutlineInputBorder(),
+                                        ),
+                                        items: [
+                                          const DropdownMenuItem<String>(
+                                            value: 'TODOS',
+                                            child: Text(
+                                              'Todos los estados',
+                                            ),
+                                          ),
+                                          for (final status in statuses)
+                                            DropdownMenuItem<String>(
+                                              value: status,
+                                              child: Text(
+                                                _statusLabel(
+                                                  status,
+                                                ),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                        ],
+                                        onChanged: (value) => setState(
+                                          () =>
+                                              _statusFilter = value ?? 'TODOS',
+                                        ),
+                                      ),
+                                    ),
+                                    OutlinedButton.icon(
+                                      onPressed: () => setState(
+                                        () => _newestFirst = !_newestFirst,
+                                      ),
+                                      icon: Icon(
+                                        _newestFirst
+                                            ? Icons.arrow_downward
+                                            : Icons.arrow_upward,
+                                        size: 17,
+                                      ),
+                                      label: Text(
+                                        _newestFirst
+                                            ? 'Más recientes'
+                                            : 'Más antiguos',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (snapshot.hasError)
+                            _message(
+                              'No fue posible cargar las '
+                              'declaraciones: ${snapshot.error}',
+                            )
+                          else if (!snapshot.hasData)
+                            const Padding(
+                              padding: EdgeInsets.all(36),
+                              child: Center(
+                                child: CircularProgressIndicator(),
+                              ),
+                            )
+                          else if (list.isEmpty)
+                            _message(
+                              'No hay declaraciones disponibles '
+                              'para este usuario.',
+                            )
+                          else if (filtered.isEmpty)
+                            _message(
+                              'No hay trámites que coincidan '
+                              'con los filtros.',
+                            )
+                          else ...[
+                            if (!compact) _tableHeader(),
+                            for (final d in filtered)
+                              if (compact)
+                                _mobileRow(d, uid)
+                              else
+                                _tableRow(d, uid),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    buildInstitutionalFooter(),
                   ],
-                );
+                  if (!pinSuperiorFooter) const SizedBox(height: 72),
+                ];
+
+                final content = pinSuperiorFooter
+                    ? CustomScrollView(
+                        slivers: [
+                          SliverPadding(
+                            padding: contentPadding,
+                            sliver: SliverList(
+                              delegate:
+                                  SliverChildListDelegate(contentChildren),
+                            ),
+                          ),
+                          SliverFillRemaining(
+                            hasScrollBody: false,
+                            child: Align(
+                              alignment: Alignment.bottomCenter,
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: contentPadding.left,
+                                ),
+                                child: buildInstitutionalFooter(),
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    : ListView(
+                        padding: contentPadding,
+                        children: contentChildren,
+                      );
 
                 return width >= 920
                     ? Row(
@@ -2173,11 +2311,9 @@ class _DashboardState extends State<Dashboard> {
   Widget buildInstitutionalFooter() {
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(top: 36),
-      padding: const EdgeInsets.symmetric(
-        horizontal: 20,
-        vertical: 24,
-      ),
+      margin: EdgeInsets.only(top: _compactSuperiorHome ? 0 : 36),
+      padding: EdgeInsets.symmetric(
+          horizontal: 20, vertical: _compactSuperiorHome ? 10 : 24),
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(

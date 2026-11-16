@@ -128,6 +128,14 @@ class _AdminPageState extends State<AdminPage> {
     return _panel(Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const Text(
+          'Perfil del usuario',
+          style: TextStyle(
+            color: Color(0xFF005A91),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 12),
         Text(_value(user, 'name'),
             style: Theme.of(context).textTheme.titleLarge),
         Text(_value(user, 'email')),
@@ -198,7 +206,23 @@ class _AdminPageState extends State<AdminPage> {
                     }
                   }, 'Cambios guardados.')
               : null,
-          child: Text(_busy ? 'Guardando…' : 'Guardar cambios'),
+          child: _busy
+              ? const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Color(0xFF29557D),
+                      ),
+                    ),
+                    SizedBox(width: 10),
+                    Text('Guardando…'),
+                  ],
+                )
+              : const Text('Guardar cambios'),
         ),
         const Divider(height: 32),
         Align(
@@ -281,15 +305,30 @@ class _AdminPageState extends State<AdminPage> {
                   child: Text('No hay usuarios para mostrar.'),
                 )
               else
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
+                SizedBox(
+                  width: double.infinity,
                   child: DataTable(
                     showCheckboxColumn: false,
+                    horizontalMargin: 12,
+                    columnSpacing: 12,
+                    dataRowMinHeight: 54,
+                    dataRowMaxHeight: 64,
+                    headingRowColor:
+                        const WidgetStatePropertyAll(Color(0xFFE1EDF7)),
+                    dataRowColor: WidgetStateProperty.resolveWith<Color?>(
+                      (states) => states.contains(WidgetState.selected)
+                          ? const Color(0xFFD9EBFA)
+                          : null,
+                    ),
                     columns: const [
-                      DataColumn(label: Text('Nombre')),
-                      DataColumn(label: Text('Correo')),
-                      DataColumn(label: Text('Rol')),
-                      DataColumn(label: Text('Superior')),
+                      DataColumn(
+                          label: Text('Usuario'),
+                          columnWidth: FlexColumnWidth(2.4)),
+                      DataColumn(
+                          label: Text('Rol'), columnWidth: FlexColumnWidth()),
+                      DataColumn(
+                          label: Text('Superior asignado'),
+                          columnWidth: FlexColumnWidth(1.4)),
                     ],
                     rows: [
                       for (final user in visible)
@@ -305,8 +344,32 @@ class _AdminPageState extends State<AdminPage> {
                                   });
                                 },
                           cells: [
-                            DataCell(Text(_value(user, 'name'))),
-                            DataCell(Text(_value(user, 'email'))),
+                            DataCell(
+                              Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    _value(user, 'name'),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.w600),
+                                  ),
+                                  Tooltip(
+                                    message: _value(user, 'email'),
+                                    child: Text(
+                                      _value(user, 'email'),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Color(0xFF53657A)),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                             DataCell(Text(_roles[_value(user, 'role')] ?? '—')),
                             DataCell(Text(_value(user, 'role') != 'declarante'
                                 ? '—'
@@ -330,9 +393,9 @@ class _AdminPageState extends State<AdminPage> {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(flex: 3, child: table),
+                      Expanded(flex: 7, child: table),
                       const SizedBox(width: 12),
-                      Expanded(child: details),
+                      Expanded(flex: 3, child: details),
                     ],
                   )
                 else ...[table, details],
@@ -406,13 +469,47 @@ class _AdminPageState extends State<AdminPage> {
           appBar: AppBar(
             backgroundColor: _blue,
             foregroundColor: Colors.white,
-            title: const Text('Administración'),
+            title: Row(
+              children: [
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    child: Image.asset(
+                      'assets/images/logo_declara_ucr.png',
+                      width: 108,
+                      height: 30,
+                      fit: BoxFit.contain,
+                      semanticLabel: 'DeclaraUCR',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const SizedBox(
+                  height: 24,
+                  child: VerticalDivider(width: 1, color: Colors.white54),
+                ),
+                const SizedBox(width: 12),
+                const Flexible(
+                  child: Text(
+                    'Administración',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
             automaticallyImplyLeading: !widget.isHome,
             actions: [
               if (widget.isHome)
-                IconButton(
-                  tooltip: 'Cerrar sesi\u00f3n',
+                TextButton.icon(
+                  style: TextButton.styleFrom(foregroundColor: Colors.white),
                   icon: const Icon(Icons.logout),
+                  label: const Text('Cerrar sesión'),
                   onPressed: () async {
                     await FirebaseAuth.instance.signOut();
                   },
@@ -422,6 +519,8 @@ class _AdminPageState extends State<AdminPage> {
           body: Column(
             children: [
               const TabBar(
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
                   tabs: [Tab(text: 'Usuarios'), Tab(text: 'Períodos')]),
               Expanded(
                   child: TabBarView(children: [_usersTab(), _periodsTab()])),

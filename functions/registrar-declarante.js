@@ -105,6 +105,8 @@ exports.registrarDeclarante = onCall(
 
         tx.create(reserva, { uid: cuenta.uid });
         tx.create(perfil, {
+          superiorId,
+          superiorName: superiorActual.get('name') || 'Superior asignado',
           name: nombre,
           identification: cedula,
           email: correo,
