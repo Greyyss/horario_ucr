@@ -2,6 +2,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter/material.dart';
 
+import '../models/declaration.dart';
+import '../widgets/declared_hours_summary.dart';
+import 'declaration_observation_tools.dart';
+
 FirebaseFunctions get _functions =>
     FirebaseFunctions.instanceFor(region: 'us-east1');
 
@@ -32,14 +36,19 @@ class _MisDeclarantesPageState extends State<MisDeclarantesPage> {
                 ),
               );
             }
+
             if (!snapshot.hasData) {
               return const Center(child: CircularProgressIndicator());
             }
+
             final users = List<dynamic>.from(snapshot.data!.data as List);
+
             if (users.isEmpty) {
               return const Center(
-                  child: Text('No tenés declarantes asignados.'));
+                child: Text('No tenés declarantes asignados.'),
+              );
             }
+
             return ListView(
               padding: const EdgeInsets.all(20),
               children: [
@@ -64,7 +73,11 @@ class _MisDeclarantesPageState extends State<MisDeclarantesPage> {
 }
 
 class NuevaDeclaracionSuperiorPage extends StatefulWidget {
-  const NuevaDeclaracionSuperiorPage({super.key, this.uid, this.name});
+  const NuevaDeclaracionSuperiorPage({
+    super.key,
+    this.uid,
+    this.name,
+  });
 
   final String? uid;
   final String? name;
@@ -85,6 +98,32 @@ class NuevaDeclaracionSuperiorPageState
     'Sábado',
   ];
 
+  static const _positions = [
+    'Interino Bachiller',
+    'Interino Licenciado',
+    'Instructor',
+    'Adjunto',
+    'Asociado',
+    'Catedrático',
+    'Coordinación de Carrera',
+    'Coordinación de Docencia',
+    'Coordinación de Investigación',
+    'Coordinación de Acción Social',
+    'Coordinación de Administración',
+    'Proyectos',
+  ];
+
+  static const _workloads = {
+    '5': '1/8 · 5 horas',
+    '10': '1/4 · 10 horas',
+    '15': '3/8 · 15 horas',
+    '20': '1/2 · 20 horas',
+    '25': '5/8 · 25 horas',
+    '30': '3/4 · 30 horas',
+    '35': '7/8 · 35 horas',
+    '40': '1 TC · 40 horas',
+  };
+
   final _form = GlobalKey<FormState>();
   final _position = TextEditingController();
   final _hours = TextEditingController();
@@ -96,26 +135,265 @@ class NuevaDeclaracionSuperiorPageState
   final _blocks = <Map<String, dynamic>>[];
 
   final _operation = FirebaseFirestore.instance.collection('users').doc().id;
+
   late final _periods = FirebaseFirestore.instance
       .collection('periods')
       .where('enabled', isEqualTo: true)
       .snapshots();
 
-  String? _period;
-  late String? _declaranteId = widget.uid;
   late final Future<HttpsCallableResult<dynamic>> _declarantes =
       _functions.httpsCallable('listarMisDeclarantes').call();
 
+  late String? _declaranteId = widget.uid;
+  String? _period;
+
+  int _day = 1;
+  int _positionRevision = 0;
+  bool _busy = false;
+
+  bool get _teaching => DeclarationObservationTools.isTeaching(_position.text);
+
+  int get _totalMinutes => _blocks.fold<int>(
+        0,
+        (sum, block) =>
+            sum +
+            _minutes(block['end'] as String)! -
+            _minutes(block['start'] as String)!,
+      );
+
+  String _blockLabel(Map<String, dynamic> block) =>
+      (block['courseCode'] ?? block['activityName'] ?? '').toString();
+
+  @override
+  void dispose() {
+    for (final controller in [
+      _position,
+      _hours,
+      _begin,
+      _finish,
+      _course,
+      _start,
+      _end,
+    ]) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  InputDecoration _decoration(String label) => InputDecoration(
+        labelText: label,
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        border: const OutlineInputBorder(),
+      );
+
+  void _notice(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  int? _minutes(String input) {
+    final value = input.trim();
+
+    if (!RegExp(r'^(?:[01]\d|2[0-3]):[0-5]\d$').hasMatch(value)) {
+      return null;
+    }
+
+    final parts = value.split(':');
+    return int.parse(parts[0]) * 60 + int.parse(parts[1]);
+  }
+
+  Future<void> _changePosition(String? value) async {
+    if (value == null || value == _position.text) return;
+
+    final changesType =
+        DeclarationObservationTools.isTeaching(value) != _teaching;
+
+    if (changesType && _blocks.isNotEmpty) {
+      final accepted = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Cambiar tipo de cargo'),
+          content: const Text(
+            'Los bloques actuales no corresponden al nuevo tipo de cargo. '
+            '¿Querés quitarlos y continuar?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancelar'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Cambiar cargo'),
+            ),
+          ],
+        ),
+      );
+
+      if (!mounted) return;
+
+      if (accepted != true) {
+        setState(() => _positionRevision++);
+        return;
+      }
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      if (changesType) {
+        _blocks.clear();
+        _course.clear();
+      }
+
+      if (!DeclarationObservationTools.isTeaching(value)) {
+        for (final block in _blocks) {
+          block['activityName'] = value;
+        }
+      }
+
+      _position.text = value;
+    });
+  }
+
+  void _addBlock() {
+    if (_position.text.isEmpty) {
+      _notice('Primero seleccioná el cargo o categoría.');
+      return;
+    }
+
+    final course = _course.text.trim().toUpperCase();
+    final from = _minutes(_start.text);
+    final to = _minutes(_end.text);
+
+    if (_teaching && !RegExp(r'^[A-Z0-9][A-Z0-9-]{1,19}$').hasMatch(course)) {
+      _notice('Ingresá las siglas del curso.');
+      return;
+    }
+
+    if (from == null || to == null || from < 420 || to > 1310 || from >= to) {
+      _notice('Ingresá un bloque válido entre 07:00 y 21:50.');
+      return;
+    }
+
+    if (from < 780 && to > 720) {
+      _notice('El horario de 12:00 a 13:00 está bloqueado.');
+      return;
+    }
+
+    if (_blocks.any(
+      (block) =>
+          block['day'] == _day &&
+          from < _minutes(block['end'] as String)! &&
+          to > _minutes(block['start'] as String)!,
+    )) {
+      _notice('El bloque se traslapa con otro del mismo día.');
+      return;
+    }
+
+    if (_blocks.length >= 84) {
+      _notice('El nombramiento admite hasta 84 bloques.');
+      return;
+    }
+
+    setState(() {
+      _blocks.add({
+        'day': _day,
+        'start': _start.text.trim(),
+        'end': _end.text.trim(),
+        if (_teaching) ...{
+          'courseCode': course,
+          'activityType': 'CONTACTO',
+        } else
+          'activityName': _position.text,
+      });
+    });
+  }
+
+  Future<void> _date(TextEditingController controller) async {
+    final now = DateTime.now();
+
+    final date = await showDatePicker(
+      context: context,
+      initialDate: DateTime.tryParse(controller.text) ?? now,
+      firstDate: DateTime(now.year - 5),
+      lastDate: DateTime(now.year + 5, 12, 31),
+    );
+
+    if (!mounted || date == null) return;
+
+    controller.text = date.toIso8601String().substring(0, 10);
+  }
+
+  Future<void> _send() async {
+    if (_busy ||
+        _declaranteId == null ||
+        _period == null ||
+        !_form.currentState!.validate()) {
+      return;
+    }
+
+    final hours = double.tryParse(
+      _hours.text.trim().replaceAll(',', '.'),
+    );
+
+    if (hours == null || !hours.isFinite || hours <= 0 || hours > 40) {
+      _notice('Ingresá una jornada mayor que cero y de hasta 40 horas.');
+      return;
+    }
+
+    if (_begin.text.compareTo(_finish.text) > 0) {
+      _notice('La fecha final debe ser igual o posterior a la inicial.');
+      return;
+    }
+
+    if (_blocks.isEmpty || _totalMinutes > hours * 60) {
+      _notice('Agregá bloques que quepan dentro de la jornada.');
+      return;
+    }
+
+    if (!_teaching && _totalMinutes != (hours * 60).round()) {
+      _notice('El horario de la actividad debe cubrir toda la jornada.');
+      return;
+    }
+
+    setState(() => _busy = true);
+
+    try {
+      await _functions.httpsCallable('publicarNombramiento').call({
+        'uid': _declaranteId,
+        'periodId': _period,
+        'operationId': _operation,
+        'appointment': {
+          'position': _position.text.trim(),
+          'expectedHours': hours,
+          'startDate': _begin.text,
+          'endDate': _finish.text,
+          'blocks': _blocks,
+        },
+      });
+
+      if (!mounted) return;
+
+      _notice('Nombramiento enviado al declarante.');
+      Navigator.of(context).pop();
+    } on FirebaseFunctionsException catch (error) {
+      if (mounted) {
+        _notice(error.message ?? 'No se pudo enviar.');
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Widget _declaranteField() {
     final name = widget.name;
+
     if (name != null && widget.uid != null) {
       return InputDecorator(
-        decoration: const InputDecoration(
-          labelText: 'Declarante',
-          isDense: true,
-          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-          border: OutlineInputBorder(),
-        ),
+        decoration: _decoration('Declarante'),
         child: Text(name),
       );
     }
@@ -126,8 +404,13 @@ class NuevaDeclaracionSuperiorPageState
         if (snapshot.hasError) {
           return const Text('No se pudieron cargar los declarantes.');
         }
-        if (!snapshot.hasData) return const LinearProgressIndicator();
+
+        if (!snapshot.hasData) {
+          return const LinearProgressIndicator();
+        }
+
         final users = snapshot.data!.data as List;
+
         if (users.isEmpty) {
           return const Text('No tenés declarantes asignados.');
         }
@@ -135,12 +418,7 @@ class NuevaDeclaracionSuperiorPageState
         return DropdownButtonFormField<String>(
           initialValue: _declaranteId,
           isExpanded: true,
-          decoration: const InputDecoration(
-            labelText: 'Declarante',
-            isDense: true,
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-            border: OutlineInputBorder(),
-          ),
+          decoration: _decoration('Declarante'),
           hint: const Text('Seleccioná un declarante'),
           items: [
             for (final user in users)
@@ -159,241 +437,112 @@ class NuevaDeclaracionSuperiorPageState
     );
   }
 
-  int _day = 1;
-  bool _busy = false;
+  Widget _periodField() => StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: _periods,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const Text('No se pudieron cargar los períodos.');
+          }
 
-  @override
-  void dispose() {
-    for (final controller in [
-      _position,
-      _hours,
-      _begin,
-      _finish,
-      _course,
-      _start,
-      _end,
-    ]) {
-      controller.dispose();
-    }
-    super.dispose();
-  }
+          if (!snapshot.hasData) {
+            return const LinearProgressIndicator();
+          }
 
-  void _notice(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
-  }
+          final docs = snapshot.data!.docs;
+          final active = docs.any((doc) => doc.id == _period);
 
-  int? _minutes(String input) {
-    final value = input.trim();
-    if (!RegExp(r'^(?:[01]\d|2[0-3]):[0-5]\d$').hasMatch(value)) {
-      return null;
-    }
-    final parts = value.split(':');
-    return int.parse(parts[0]) * 60 + int.parse(parts[1]);
-  }
+          if (docs.isEmpty) {
+            return const Text('No hay períodos habilitados.');
+          }
 
-  int get _contactMinutes => _blocks.fold<int>(
-        0,
-        (sum, block) =>
-            sum +
-            _minutes(block['end'] as String)! -
-            _minutes(block['start'] as String)!,
+          return DropdownButton<String>(
+            value: active ? _period : null,
+            isExpanded: true,
+            hint: const Text('Seleccioná un período'),
+            items: [
+              for (final doc in docs)
+                DropdownMenuItem(
+                  value: doc.id,
+                  child: Text(
+                    (doc.data()['name'] ?? doc.data()['label'] ?? doc.id)
+                        .toString(),
+                  ),
+                ),
+            ],
+            onChanged: _busy ? null : (id) => setState(() => _period = id),
+          );
+        },
       );
 
-  void _addBlock() {
-    final course = _course.text.trim().toUpperCase();
-    final from = _minutes(_start.text);
-    final to = _minutes(_end.text);
-    if (!RegExp(r'^[A-Z0-9][A-Z0-9-]{1,19}$').hasMatch(course)) {
-      _notice('Ingresá las siglas del curso.');
-      return;
-    }
-    if (from == null || to == null || from < 420 || to > 1310 || from >= to) {
-      _notice('Ingresá un bloque válido entre 07:00 y 21:50.');
-      return;
-    }
-    if (from < 780 && to > 720) {
-      _notice('El horario de 12:00 a 13:00 está bloqueado.');
-      return;
-    }
-    if (_blocks.any((block) =>
-        block['day'] == _day &&
-        from < _minutes(block['end'] as String)! &&
-        to > _minutes(block['start'] as String)!)) {
-      _notice('El bloque se traslapa con otro del mismo día.');
-      return;
-    }
-    if (_blocks.length >= 84) {
-      _notice('El nombramiento admite hasta 84 bloques.');
-      return;
-    }
-    setState(() => _blocks.add({
-          'day': _day,
-          'start': _start.text.trim(),
-          'end': _end.text.trim(),
-          'courseCode': course,
-          'activityType': 'CONTACTO',
-        }));
-  }
-
-  Future<void> _date(TextEditingController controller) async {
-    final now = DateTime.now();
-    final date = await showDatePicker(
-      context: context,
-      initialDate: DateTime.tryParse(controller.text) ?? now,
-      firstDate: DateTime(now.year - 5),
-      lastDate: DateTime(now.year + 5, 12, 31),
-    );
-    if (!mounted || date == null) return;
-    controller.text = date.toIso8601String().substring(0, 10);
-  }
-
-  Future<void> _send() async {
-    if (_busy ||
-        _declaranteId == null ||
-        _period == null ||
-        !_form.currentState!.validate()) return;
-    final hours = double.tryParse(_hours.text.trim().replaceAll(',', '.'));
-    if (hours == null || !hours.isFinite || hours <= 0 || hours > 40) {
-      _notice('Ingresá una jornada mayor que cero y de hasta 40 horas.');
-      return;
-    }
-    if (_begin.text.compareTo(_finish.text) > 0) {
-      _notice('La fecha final debe ser igual o posterior a la inicial.');
-      return;
-    }
-    if (_blocks.isEmpty || _contactMinutes > hours * 60) {
-      _notice('Agregá bloques de contacto que quepan dentro de la jornada.');
-      return;
-    }
-
-    setState(() => _busy = true);
-    try {
-      await _functions.httpsCallable('publicarNombramiento').call({
-        'uid': _declaranteId,
-        'periodId': _period,
-        'operationId': _operation,
-        'appointment': {
-          'position': _position.text.trim(),
-          'expectedHours': hours,
-          'startDate': _begin.text,
-          'endDate': _finish.text,
-          'blocks': _blocks,
-        },
-      });
-      if (!mounted) return;
-      _notice('Nombramiento enviado al declarante.');
-      Navigator.of(context).pop();
-    } on FirebaseFunctionsException catch (error) {
-      if (mounted) _notice(error.message ?? 'No se pudo enviar.');
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Widget _appointmentOptions() {
-    const positions = [
-      'Interino Bachiller',
-      'Interino Licenciado',
-      'Instructor',
-      'Adjunto',
-      'Asociado',
-      'Catedrático',
-      'Coordinación de Carrera',
-      'Coordinación de Docencia',
-      'Coordinación de Investigación',
-      'Coordinación de Acción Social',
-      'Coordinación de Administración',
-      'Proyectos',
-    ];
-
-    const workloads = {
-      '5': '1/8 · 5 horas',
-      '10': '1/4 · 10 horas',
-      '15': '3/8 · 15 horas',
-      '20': '1/2 · 20 horas',
-      '25': '5/8 · 25 horas',
-      '30': '3/4 · 30 horas',
-      '35': '7/8 · 35 horas',
-      '40': '1 TC · 40 horas',
-    };
-
-    InputDecoration decoration(String label) => InputDecoration(
-          labelText: label,
-          isDense: true,
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-          border: const OutlineInputBorder(),
-        );
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        DropdownButtonFormField<String>(
-          initialValue:
-              positions.contains(_position.text) ? _position.text : null,
-          isExpanded: true,
-          decoration: decoration('Cargo o categoría'),
-          items: [
-            for (final position in positions)
-              DropdownMenuItem(
-                value: position,
-                child: Text(position, overflow: TextOverflow.ellipsis),
+  Widget _appointmentOptions() => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          DropdownButtonFormField<String>(
+            key: ValueKey('position-$_positionRevision-${_position.text}'),
+            initialValue:
+                _positions.contains(_position.text) ? _position.text : null,
+            isExpanded: true,
+            decoration: _decoration('Cargo o categoría'),
+            items: [
+              for (final position in _positions)
+                DropdownMenuItem(
+                  value: position,
+                  child: Text(position, overflow: TextOverflow.ellipsis),
+                ),
+            ],
+            onChanged: _busy ? null : _changePosition,
+            validator: (value) => value == null ? 'Seleccioná un cargo.' : null,
+          ),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            initialValue:
+                _workloads.containsKey(_hours.text) ? _hours.text : null,
+            isExpanded: true,
+            decoration: _decoration('Jornada de trabajo'),
+            items: [
+              for (final entry in _workloads.entries)
+                DropdownMenuItem(
+                  value: entry.key,
+                  child: Text(entry.value),
+                ),
+            ],
+            onChanged: _busy
+                ? null
+                : (value) => setState(() => _hours.text = value ?? ''),
+            validator: (value) =>
+                value == null ? 'Seleccioná una jornada.' : null,
+          ),
+          const SizedBox(height: 8),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _field(
+                  'Inicio de vigencia',
+                  _begin,
+                  required: true,
+                  onTap: () => _date(_begin),
+                ),
               ),
-          ],
-          onChanged: _busy ? null : (value) => _position.text = value ?? '',
-          validator: (value) => value == null ? 'Seleccioná un cargo.' : null,
-        ),
-        const SizedBox(height: 8),
-        DropdownButtonFormField<String>(
-          initialValue: workloads.containsKey(_hours.text) ? _hours.text : null,
-          isExpanded: true,
-          decoration: decoration('Jornada de trabajo'),
-          items: [
-            for (final entry in workloads.entries)
-              DropdownMenuItem(
-                value: entry.key,
-                child: Text(entry.value),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _field(
+                  'Fin de vigencia',
+                  _finish,
+                  required: true,
+                  onTap: () => _date(_finish),
+                ),
               ),
-          ],
-          onChanged: _busy ? null : (value) => _hours.text = value ?? '',
-          validator: (value) =>
-              value == null ? 'Seleccioná una jornada.' : null,
-        ),
-        const SizedBox(height: 8),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: _field(
-                'Inicio de vigencia',
-                _begin,
-                required: true,
-                onTap: () => _date(_begin),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _field(
-                'Fin de vigencia',
-                _finish,
-                required: true,
-                onTap: () => _date(_finish),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
+            ],
+          ),
+        ],
+      );
 
   Widget _field(
     String label,
     TextEditingController controller, {
     bool required = false,
     VoidCallback? onTap,
-    TextInputType? keyboard,
   }) =>
       Padding(
         padding: const EdgeInsets.only(bottom: 8),
@@ -402,176 +551,152 @@ class NuevaDeclaracionSuperiorPageState
           enabled: !_busy,
           readOnly: onTap != null,
           onTap: onTap,
-          keyboardType: keyboard,
-          decoration: InputDecoration(
-            labelText: label,
-            isDense: true,
-            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-            border: const OutlineInputBorder(),
-          ),
+          decoration: _decoration(label),
           validator: (value) => required && (value ?? '').trim().isEmpty
               ? 'Completá este campo.'
               : null,
         ),
       );
 
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(
-            // Formulario compacto del superior.
-            backgroundColor: const Color(0xFF005A91),
-            foregroundColor: Colors.white,
-            toolbarHeight: 52,
-            title: const Text('Nueva declaración')),
-        body: _withContactSchedule(
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 760),
-              child: Form(
-                key: _form,
-                child: ListView(
-                  padding: const EdgeInsets.all(14),
-                  children: [
-                    _declaranteField(),
-                    const SizedBox(height: 8),
-                    StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                      stream: _periods,
-                      builder: (context, snapshot) {
-                        if (snapshot.hasError) {
-                          return const Text(
-                              'No se pudieron cargar los períodos.');
-                        }
-                        if (!snapshot.hasData)
-                          return const LinearProgressIndicator();
-                        final docs = snapshot.data!.docs;
-                        final active = docs.any((doc) => doc.id == _period);
-                        if (docs.isEmpty)
-                          return const Text('No hay períodos habilitados.');
-                        return DropdownButton<String>(
-                          value: active ? _period : null,
-                          isExpanded: true,
-                          hint: const Text('Seleccioná un período'),
-                          items: [
-                            for (final doc in docs)
-                              DropdownMenuItem(
-                                value: doc.id,
-                                child: Text((doc.data()['name'] ??
-                                        doc.data()['label'] ??
-                                        doc.id)
-                                    .toString()),
-                              ),
-                          ],
-                          onChanged: _busy
-                              ? null
-                              : (id) => setState(() => _period = id),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    _appointmentOptions(),
-                    const Divider(),
-                    Text('Bloques de contacto',
-                        style: Theme.of(context).textTheme.titleMedium),
-                    DropdownButton<int>(
-                      value: _day,
-                      items: [
-                        for (var i = 0; i < _days.length; i++)
-                          DropdownMenuItem(value: i + 1, child: Text(_days[i])),
-                      ],
-                      onChanged:
-                          _busy ? null : (day) => setState(() => _day = day!),
-                    ),
-                    _field('Siglas del curso', _course),
-                    Row(
-                      children: [
-                        Expanded(child: _field('Inicio HH:MM', _start)),
-                        const SizedBox(width: 12),
-                        Expanded(child: _field('Fin HH:MM', _end)),
-                      ],
-                    ),
-                    OutlinedButton.icon(
-                      onPressed: _busy ? null : _addBlock,
-                      icon: const Icon(Icons.add),
-                      label: const Text('Agregar bloque de contacto'),
-                    ),
-                    for (var i = 0; i < _blocks.length; i++)
-                      ListTile(
-                        dense: true,
-                        visualDensity: VisualDensity.compact,
-                        title: Text('${_blocks[i]['courseCode']} · '
-                            '${_days[(_blocks[i]['day'] as int) - 1]}'),
-                        subtitle:
-                            Text('${_blocks[i]['start']}–${_blocks[i]['end']}'),
-                        trailing: IconButton(
-                          tooltip: 'Quitar bloque',
-                          icon: const Icon(Icons.close),
-                          onPressed: _busy
-                              ? null
-                              : () => setState(() => _blocks.removeAt(i)),
-                        ),
+  Widget _formPanel() => Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 760),
+          child: Form(
+            key: _form,
+            child: ListView(
+              padding: const EdgeInsets.all(14),
+              children: [
+                _declaranteField(),
+                const SizedBox(height: 8),
+                _periodField(),
+                const SizedBox(height: 8),
+                _appointmentOptions(),
+                const Divider(),
+                Text(
+                  _teaching ? 'Bloques de contacto' : 'Horario de la actividad',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                DropdownButton<int>(
+                  value: _day,
+                  items: [
+                    for (var i = 0; i < _days.length; i++)
+                      DropdownMenuItem(
+                        value: i + 1,
+                        child: Text(_days[i]),
                       ),
-                    const SizedBox(height: 8),
-                    Text(
-                        'Contacto: ${_contactMinutes ~/ 60} h ${_contactMinutes % 60} min'),
-                    const SizedBox(height: 8),
-                    FilledButton(
-                      onPressed: _busy ||
-                              _declaranteId == null ||
-                              _period == null ||
-                              _blocks.isEmpty
-                          ? null
-                          : _send,
-                      child: _busy
-                          ? const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Color(0xFF29557D),
-                                  ),
-                                ),
-                                SizedBox(width: 10),
-                                Text('Enviando…'),
-                              ],
-                            )
-                          : const Text('Enviar al declarante'),
-                    ),
+                  ],
+                  onChanged:
+                      _busy ? null : (day) => setState(() => _day = day!),
+                ),
+                if (_teaching) _field('Siglas del curso', _course),
+                Row(
+                  children: [
+                    Expanded(child: _field('Inicio HH:MM', _start)),
+                    const SizedBox(width: 12),
+                    Expanded(child: _field('Fin HH:MM', _end)),
                   ],
                 ),
-              ),
+                OutlinedButton.icon(
+                  onPressed: _busy ? null : _addBlock,
+                  icon: const Icon(Icons.add),
+                  label: Text(
+                    _teaching
+                        ? 'Agregar bloque de contacto'
+                        : 'Agregar bloque de actividad',
+                  ),
+                ),
+                for (var i = 0; i < _blocks.length; i++)
+                  ListTile(
+                    dense: true,
+                    visualDensity: VisualDensity.compact,
+                    title: Text(
+                      '${_blockLabel(_blocks[i])} · '
+                      '${_days[(_blocks[i]['day'] as int) - 1]}',
+                    ),
+                    subtitle: Text(
+                      '${_blocks[i]['start']}–${_blocks[i]['end']}',
+                    ),
+                    trailing: IconButton(
+                      tooltip: 'Quitar bloque',
+                      icon: const Icon(Icons.close),
+                      onPressed: _busy
+                          ? null
+                          : () => setState(() => _blocks.removeAt(i)),
+                    ),
+                  ),
+                const SizedBox(height: 8),
+                DeclaredHoursSummary(
+                  blocks:
+                      _blocks.map((block) => TimeBlock.fromMap(block)).toList(),
+                  expectedHours: double.tryParse(_hours.text) ?? 0,
+                  position: _position.text,
+                ),
+                const SizedBox(height: 8),
+                FilledButton(
+                  onPressed: _busy ||
+                          _declaranteId == null ||
+                          _period == null ||
+                          _blocks.isEmpty
+                      ? null
+                      : _send,
+                  child: _busy
+                      ? const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            ),
+                            SizedBox(width: 10),
+                            Text('Enviando…'),
+                          ],
+                        )
+                      : const Text('Enviar al declarante'),
+                ),
+              ],
             ),
           ),
         ),
       );
 
-  Widget _withContactSchedule(Widget form) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final schedule = _contactSchedule(context);
-        if (constraints.maxWidth >= 960) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(flex: 4, child: form),
-              Expanded(flex: 6, child: schedule),
-            ],
-          );
-        }
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(
+          backgroundColor: const Color(0xFF005A91),
+          foregroundColor: Colors.white,
+          toolbarHeight: 52,
+          title: const Text('Nueva declaración'),
+        ),
+        body: LayoutBuilder(
+          builder: (context, constraints) {
+            final form = _formPanel();
+            final schedule = _schedule(context);
 
-        return Column(
-          children: [
-            Expanded(flex: 3, child: form),
-            Expanded(flex: 2, child: schedule),
-          ],
-        );
-      },
-    );
-  }
+            if (constraints.maxWidth >= 960) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(flex: 4, child: form),
+                  Expanded(flex: 6, child: schedule),
+                ],
+              );
+            }
 
-  Widget _contactSchedule(BuildContext context) {
+            return Column(
+              children: [
+                Expanded(flex: 3, child: form),
+                Expanded(flex: 2, child: schedule),
+              ],
+            );
+          },
+        ),
+      );
+
+  Widget _schedule(BuildContext context) {
     const blue = Color(0xFF005A91);
     const palette = [
       Color(0xFFD5E9FA),
@@ -583,10 +708,15 @@ class NuevaDeclaracionSuperiorPageState
       Color(0xFFAFDAE5),
       Color(0xFFC5D4E6),
     ];
+
     final colors = <String, Color>{};
+
     for (final block in _blocks) {
-      final course = block['courseCode'] as String;
-      colors.putIfAbsent(course, () => palette[colors.length % palette.length]);
+      final label = _blockLabel(block);
+      colors.putIfAbsent(
+        label,
+        () => palette[colors.length % palette.length],
+      );
     }
 
     Widget cell(
@@ -608,6 +738,7 @@ class NuevaDeclaracionSuperiorPageState
           style: TextStyle(color: foreground, fontSize: 11),
         ),
       );
+
       return Expanded(
         flex: flex,
         child: tooltip == null
@@ -639,17 +770,21 @@ class NuevaDeclaracionSuperiorPageState
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 Text(
-                    'Contacto: ${_contactMinutes ~/ 60} h ${_contactMinutes % 60} min'),
+                  '${_teaching ? 'Contacto' : 'Actividad'}: '
+                  '${_totalMinutes ~/ 60} h ${_totalMinutes % 60} min',
+                ),
                 const SizedBox(height: 10),
                 SizedBox(
                   height: rowHeight,
                   child: Row(
                     children: [
                       for (final label in ['Horas', ..._days])
-                        cell(label,
-                            tooltip: label,
-                            background: blue,
-                            foreground: Colors.white),
+                        cell(
+                          label,
+                          tooltip: label,
+                          background: blue,
+                          foreground: Colors.white,
+                        ),
                     ],
                   ),
                 ),
@@ -659,12 +794,17 @@ class NuevaDeclaracionSuperiorPageState
                     child: Row(
                       children: [
                         cell(
-                          '${hour.toString().padLeft(2, '0')}:00–${hour.toString().padLeft(2, '0')}:50',
+                          '${hour.toString().padLeft(2, '0')}:00–'
+                          '${hour.toString().padLeft(2, '0')}:50',
                           background: blue,
                           foreground: Colors.white,
                         ),
                         if (hour == 12)
-                          cell('', flex: 6, background: const Color(0xFF424B55))
+                          cell(
+                            '',
+                            flex: 6,
+                            background: const Color(0xFF424B55),
+                          )
                         else
                           for (var day = 1; day <= 6; day++)
                             Builder(
@@ -676,22 +816,24 @@ class NuevaDeclaracionSuperiorPageState
                                       _minutes(block['end'] as String)! >
                                           hour * 60;
                                 }).toList();
+
                                 if (matches.isEmpty) return cell('');
 
-                                final courses = matches
-                                    .map((block) =>
-                                        block['courseCode'] as String)
+                                final labels = matches
+                                    .map(_blockLabel)
                                     .toSet()
                                     .join(' / ');
+
                                 final times = matches.map((block) {
-                                  return '${block['courseCode']}: ${block['start']}–${block['end']}';
+                                  return '${_blockLabel(block)}: '
+                                      '${block['start']}–${block['end']}';
                                 }).join('\n');
 
                                 return cell(
-                                  courses,
+                                  labels,
                                   tooltip: times,
                                   background: matches.length == 1
-                                      ? colors[matches.first['courseCode']]!
+                                      ? colors[_blockLabel(matches.first)]!
                                       : const Color(0xFFDDE8EF),
                                 );
                               },

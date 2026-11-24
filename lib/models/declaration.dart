@@ -43,9 +43,13 @@ class Appointment {
   final String endDate;
   final double expectedHours;
   final List<TimeBlock> blocks;
-
-  // Null conserva los registros antiguos y los trabajos externos por horas.
   final String? workloadFraction;
+
+  // Identificador del nombramiento enviado por el superior.
+  final String? assignmentId;
+
+  // Vincula una institución externa con un nombramiento interno.
+  final String? relatedAssignmentId;
 
   const Appointment({
     required this.workplace,
@@ -55,9 +59,14 @@ class Appointment {
     required this.expectedHours,
     required this.blocks,
     this.workloadFraction,
+    this.assignmentId,
+    this.relatedAssignmentId,
   });
 
   Map<String, dynamic> toMap() => {
+        if (assignmentId != null) 'assignmentId': assignmentId,
+        if (relatedAssignmentId != null)
+          'relatedAssignmentId': relatedAssignmentId,
         'workplace': workplace,
         'position': position,
         'startDate': startDate,
@@ -68,6 +77,8 @@ class Appointment {
       };
 
   factory Appointment.fromMap(Map<String, dynamic> map) => Appointment(
+        assignmentId: map['assignmentId'] as String?,
+        relatedAssignmentId: map['relatedAssignmentId'] as String?,
         workplace: map['workplace'] ?? '',
         position: map['position'] ?? '',
         startDate: map['startDate'] ?? '',
@@ -75,7 +86,11 @@ class Appointment {
         expectedHours: (map['expectedHours'] as num? ?? 0).toDouble(),
         workloadFraction: map['workloadFraction'] as String?,
         blocks: (map['blocks'] as List? ?? [])
-            .map((block) => TimeBlock.fromMap(Map<String, dynamic>.from(block)))
+            .map(
+              (block) => TimeBlock.fromMap(
+                Map<String, dynamic>.from(block),
+              ),
+            )
             .toList(),
       );
 }
@@ -92,8 +107,6 @@ class Declaration {
   final String superiorId;
   final String status;
   final String observations;
-
-  // Motivo de devolución, independiente del resumen de horarios.
   final String returnNote;
   final int version;
   final List<Appointment> appointments;
@@ -132,16 +145,26 @@ class Declaration {
         'observations': observations,
         'returnNote': returnNote,
         'version': version,
-        'appointments': appointments.map((a) => a.toMap()).toList(),
-        'externalJobs': externalJobs.map((a) => a.toMap()).toList(),
+        'appointments': appointments.map((job) => job.toMap()).toList(),
+        'externalJobs': externalJobs.map((job) => job.toMap()).toList(),
         'updatedAt': Timestamp.fromDate(updatedAt),
       };
 
-  factory Declaration.fromDoc(DocumentSnapshot<Map<String, dynamic>> document) {
+  factory Declaration.fromDoc(
+    DocumentSnapshot<Map<String, dynamic>> document,
+  ) {
     final map = document.data()!;
-    List<Appointment> appointments(dynamic value) => (value as List? ?? [])
-        .map((job) => Appointment.fromMap(Map<String, dynamic>.from(job)))
-        .toList();
+
+    List<Appointment> appointments(dynamic value) {
+      return (value as List? ?? [])
+          .map(
+            (job) => Appointment.fromMap(
+              Map<String, dynamic>.from(job),
+            ),
+          )
+          .toList();
+    }
+
     return Declaration(
       id: document.id,
       ownerId: map['ownerId'] ?? '',

@@ -1,6 +1,7 @@
 'use strict';
 
 const { isDeepStrictEqual } = require('node:util');
+const { enforceAssignments } = require('./assignment-policy');
 
 const {
   ScheduleValidationError,
@@ -274,7 +275,7 @@ function createDeclarationHandlers({
 
     // El texto recibido del cliente no determina
     // las observaciones que se guardan.
-    const payload = {
+    let payload = {
       ...input,
       observations: '',
     };
@@ -373,6 +374,14 @@ function createDeclarationHandlers({
       checkSuperior(superiorSnapshot, uid);
 
       const current = snapshot.data();
+      if (profileSnapshot.get('role') !== 'declarante') {
+        deny('permission-denied', 'Esta opción es para declarantes.');
+      }
+      const assigned = await enforceAssignments({
+        db, tx, uid, payload, current, profile: profileSnapshot.data(), declarationId: ref.id, deny,
+      });
+      // Cada reintento parte de los datos originales del cliente.
+      payload = assigned.payload;
 
       const scheduleChanged =
         !isNew &&
@@ -448,10 +457,16 @@ function createDeclarationHandlers({
       }
 
       const stamp = FieldValue.serverTimestamp();
+      for (const binding of assigned.bindings) {
+        if (!binding.source.declarationId) tx.update(binding.ref, {
+          declarationId: ref.id, claimedAt: stamp,
+        });
+      }
 
       if (isNew) {
         const data = {
           ...editable,
+          ...(assigned.bindings.length ? { assignmentFormatVersion: 1 } : {}),
           formatVersion: 2,
           observationsFormatVersion: 1,
           ownerId: uid,
@@ -491,6 +506,7 @@ function createDeclarationHandlers({
 
         const patch = {
           ...editable,
+          ...(assigned.bindings.length ? { assignmentFormatVersion: 1 } : {}),
           ...(automatic
             ? { observationsFormatVersion: 1 }
             : {}),
@@ -584,6 +600,9 @@ function createDeclarationHandlers({
       );
 
       checkSuperior(superiorSnapshot, uid);
+
+      await enforceAssignments({ db, tx, uid, payload: current, current,
+        profile: profileSnapshot.data(), declarationId: ref.id, deny, complete: true });
 
       // Conserva todas las reglas de horarios,
       // incluido el máximo de diez horas diarias.
