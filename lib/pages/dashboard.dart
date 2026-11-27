@@ -475,8 +475,8 @@ class _DashboardState extends State<Dashboard> {
             d.status == 'PENDIENTE_FIRMA_SUPERIOR') ...[
           _action(
             d,
-            'signSuperior',
-            'Aprobar y firmar',
+            'acceptSuperior',
+            'Aceptar declaración',
             primary: true,
           ),
           _action(
@@ -491,7 +491,7 @@ class _DashboardState extends State<Dashboard> {
           _action(
             d,
             'sendHr',
-            'Enviar a RRHH',
+            'Aceptar declaración',
             primary: true,
           ),
         if (role == 'rrhh' && d.status == 'ENVIADA_A_RRHH')

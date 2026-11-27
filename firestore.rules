@@ -1,3 +1,4 @@
+// ADMIN_SCOPE_ONLY
 rules_version = '2';
 
 service cloud.firestore {
@@ -118,7 +119,9 @@ function validProfileChanges() {
     }
 
     function canRead(d) {
-      return owner(d) || superior(d) || staff();
+      return signed()
+        && role() != 'admin'
+        && (owner(d) || superior(d) || role() == 'rrhh');
     }
 
     function declarationAfter(id) {
@@ -288,12 +291,17 @@ function validProfileChanges() {
 
     // DECLARACIONES
     match /declarations/{id} {
-      allow read: if signed() && canRead(resource.data);
+      allow read: if signed() && role() != 'admin' && (
+signed() && canRead(resource.data)
+);
 
       // Crear contenido solo mediante saveDeclarationValidated.
-      allow create: if false;
+      allow create: if signed() && role() != 'admin' && (
+false
+);
 
-      allow update: if signed() && (
+      allow update: if signed() && role() != 'admin' && (
+signed() && (
         (
           request.resource.data.version == resource.data.version &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
@@ -366,35 +374,53 @@ function validProfileChanges() {
             )
           )
         )
-      );
+      )
+);
 
-      allow delete: if false;
+      allow delete: if signed() && role() != 'admin' && (
+false
+);
 
       // VERSIONES
       match /versions/{version} {
-        allow read: if signed() && canRead(declarationBefore(id));
+        allow read: if signed() && role() != 'admin' && (
+signed() && canRead(declarationBefore(id))
+);
 
         // getAfter permite comprobar la declaracion creada en el mismo batch.
-        allow create: if false; // Solo funciones de servidor.
+        allow create: if signed() && role() != 'admin' && (
+false
+); // Solo funciones de servidor.
 
-        allow update: if false; // Solo funciones de servidor.
+        allow update: if signed() && role() != 'admin' && (
+false
+); // Solo funciones de servidor.
 
-        allow delete: if false;
+        allow delete: if signed() && role() != 'admin' && (
+false
+);
 
 // Registro del PDF definitivo de esta versión.
 match /artifacts/{artifactId} {
-  allow read: if signed()
+  allow read: if signed() && role() != 'admin' && (
+signed()
     && artifactId == 'finalPdf'
-    && canRead(declarationBefore(id));
+    && canRead(declarationBefore(id))
+);
 
   // Solo el backend administra este registro.
-  allow write: if false;
+  allow write: if signed() && role() != 'admin' && (
+false
+);
 }
 
 match /signatures/{signatureId} {
-  allow read: if signed() && canRead(declarationBefore(id));
+  allow read: if signed() && role() != 'admin' && (
+signed() && canRead(declarationBefore(id))
+);
 
-  allow create: if signed() &&
+  allow create: if signed() && role() != 'admin' && (
+signed() &&
     request.resource.data.userId == request.auth.uid &&
     request.resource.data.version == int(version) &&
     (
@@ -410,28 +436,37 @@ match /signatures/{signatureId} {
         declarationBefore(id).status == 'PENDIENTE_FIRMA_SUPERIOR' &&
         declarationAfter(id).status == 'FIRMADA_POR_SUPERIOR'
       )
-    );
+    )
+);
 
-  allow update, delete: if false;
+  allow update, delete: if signed() && role() != 'admin' && (
+false
+);
 }
       }
 
 
       // HISTORIAL DE EVENTOS
       match /events/{eventId} {
-        allow read: if signed() && canRead(declarationBefore(id));
+        allow read: if signed() && role() != 'admin' && (
+signed() && canRead(declarationBefore(id))
+);
 
         // getAfter permite el evento de creacion en el mismo batch.
        
 
 
 
-allow create: if signed()
+allow create: if signed() && role() != 'admin' && (
+signed()
           && request.resource.data.userId == request.auth.uid
           && !(request.resource.data.event in ['CREADA', 'MODIFICADA', 'validate', 'newVersion'])
-          && validTransitionEvent(id);
+          && validTransitionEvent(id)
+);
 
-        allow update, delete: if false;
+        allow update, delete: if signed() && role() != 'admin' && (
+false
+);
       }
     }
   }

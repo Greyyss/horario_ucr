@@ -1,3 +1,4 @@
+// ADMIN_SCOPE_ONLY
 'use strict';
 
 const { isDeepStrictEqual } = require('node:util');
@@ -240,8 +241,21 @@ function createDeclarationHandlers({
   // GUARDAR BORRADOR
   // ==========================================================
 
+  async function denyAdminDeclarationAccess(uid) {
+    const profile = await db.collection('users').doc(uid).get();
+
+    if (profile.get('role') === 'admin') {
+      deny(
+        'permission-denied',
+        'El administrador gestiona usuarios y períodos. ' +
+        'No puede operar declaraciones.'
+      );
+    }
+  }
+
   async function save(request) {
     const uid = uidOf(request);
+    await denyAdminDeclarationAccess(uid);
     const input = request.data;
 
     if (
@@ -555,6 +569,7 @@ function createDeclarationHandlers({
 
   async function validateStored(request) {
     const uid = uidOf(request);
+    await denyAdminDeclarationAccess(uid);
     const id = idOf(request.data?.id);
     const version = versionOf(request.data?.version);
 
@@ -679,6 +694,7 @@ function createDeclarationHandlers({
 
   async function newVersion(request) {
     const uid = uidOf(request);
+    await denyAdminDeclarationAccess(uid);
     const id = idOf(request.data?.id);
     const version = versionOf(request.data?.version);
 

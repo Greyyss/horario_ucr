@@ -139,6 +139,22 @@ class DeclarationService {
     String note = '',
     bool confirmed = false,
   }) async {
+    if (action == 'acceptSuperior') {
+      try {
+        await FirebaseFunctions.instanceFor(region: 'us-east1')
+            .httpsCallable('acceptDeclarationAndSendHr')
+            .call(<String, dynamic>{
+          'declarationId': declaration.id,
+          'version': declaration.version,
+        });
+      } on FirebaseFunctionsException catch (error) {
+        throw StateError(
+          error.message ?? 'No se pudo aceptar la declaración.',
+        );
+      }
+      return;
+    }
+
     final reference = declarations.doc(declaration.id);
 
     final allowed = {

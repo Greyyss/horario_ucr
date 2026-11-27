@@ -1,3 +1,4 @@
+// ADMIN_SCOPE_ONLY
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const logger = require("firebase-functions/logger");
 const { initializeApp } = require("firebase-admin/app");
@@ -32,10 +33,10 @@ async function validateDeclaration(tx, uid, declarationRef, version) {
       tx.get(versionRef.collection("signatures").doc("superior")),
     ]);
 
-  if (!["rrhh", "admin"].includes(userDoc.data()?.role)) {
+  if (!["rrhh"].includes(userDoc.data()?.role)) {
     throw new HttpsError(
       "permission-denied",
-      "Solo RRHH o administración puede archivar el PDF."
+      "Solo RRHH puede archivar el PDF."
     );
   }
 
@@ -320,9 +321,9 @@ exports.downloadDeclarationPdf = onCall(
         const declaration = declarationDoc.data();
         const role = userDoc.data()?.role;
 
-        const allowed = declaration && (
+        const allowed = declaration && role !== "admin" && (
           declaration.ownerId === uid ||
-          ["rrhh", "admin"].includes(role) ||
+          ["rrhh"].includes(role) ||
           (declaration.superiorId === uid && role === "superior")
         );
 
@@ -409,3 +410,8 @@ exports.downloadDeclarationPdf = onCall(
 Object.assign(exports, require('./eliminar-perfil'));
 
 Object.assign(exports, require('./publicar-nombramiento'));
+
+Object.assign(exports, require('./aceptar-declaracion'));
+
+Object.assign(exports, require('./declaration-mail-events'));
+Object.assign(exports, require('./declaration-mail'));

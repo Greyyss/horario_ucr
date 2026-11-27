@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/declaration.dart';
+import '../pages/declaration_observation_tools.dart';
 import '../services/validation_service.dart';
 import 'declared_hours_summary.dart';
 
@@ -72,7 +73,7 @@ class DeclarationAssignmentCard extends StatelessWidget {
             : appointment.expectedHours.toString();
 
     final description =
-        '${courses.isEmpty ? 'Sin curso registrado' : courses.join(', ')} | '
+        '${DeclarationObservationTools.isTeaching(appointment.position) ? (courses.isEmpty ? 'Sin curso registrado' : courses.join(', ')) : 'Actividad asignada'} | '
         '${period.isEmpty ? 'Sin período registrado' : period} | '
         'Jornada: $hours h';
 
@@ -138,8 +139,7 @@ class DeclarationAssignmentCard extends StatelessWidget {
                 IconButton(
                   tooltip: 'Editar ${job.workplace}',
                   visualDensity: VisualDensity.compact,
-                  onPressed:
-                      busy ? null : () => onEditExternal(job),
+                  onPressed: busy ? null : () => onEditExternal(job),
                   icon: const Icon(
                     Icons.edit_outlined,
                     size: 18,
@@ -148,8 +148,7 @@ class DeclarationAssignmentCard extends StatelessWidget {
                 IconButton(
                   tooltip: 'Quitar ${job.workplace}',
                   visualDensity: VisualDensity.compact,
-                  onPressed:
-                      busy ? null : () => onRemoveExternal(job),
+                  onPressed: busy ? null : () => onRemoveExternal(job),
                   icon: const Icon(
                     Icons.close,
                     size: 18,
@@ -184,9 +183,13 @@ class DeclarationAssignmentCard extends StatelessWidget {
         }
       },
       itemBuilder: (_) => [
-        const PopupMenuItem(
+        PopupMenuItem(
           value: 'edit',
-          child: Text('Editar nombramiento'),
+          child: Text(
+            DeclarationObservationTools.isTeaching(appointment.position)
+                ? 'Editar nombramiento'
+                : 'Ver nombramiento',
+          ),
         ),
         PopupMenuItem(
           value: 'external',
@@ -200,9 +203,7 @@ class DeclarationAssignmentCard extends StatelessWidget {
           vertical: 8,
         ),
         decoration: BoxDecoration(
-          color: complete
-              ? const Color(0xFFEBF4F5)
-              : const Color(0xFFF0F4F8),
+          color: complete ? const Color(0xFFEBF4F5) : const Color(0xFFF0F4F8),
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
             color: const Color(0xFFD6E0E9),
