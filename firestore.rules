@@ -92,8 +92,24 @@ function validProfileChanges() {
 }
 
     // FUNCIONES DE SEGURIDAD
+    function accountCanUseApp() {
+      let path =
+        /databases/$(database)/documents/users/$(request.auth.uid);
+
+      return !exists(path) || (
+        get(path).data.get('role', '') != 'eliminando'
+        && (
+          get(path).data.get('accessPolicy', null) == null
+          || (
+            get(path).data.get('accessPolicy', null) == 1
+            && get(path).data.get('accessState', '') == 'active'
+          )
+        )
+      );
+    }
+
     function signed() {
-      return request.auth != null;
+      return request.auth != null && accountCanUseApp();
     }
 
     function userDoc() {
@@ -224,8 +240,12 @@ function validProfileChanges() {
       // El perfil completo solo está disponible para su dueño y para
       // administración/RRHH, que ya intervenían en el flujo del proyecto.
       // Un superior no obtiene acceso general a los perfiles.
-      allow read: if signed()
-        && (request.auth.uid == uid || staff());
+      // El perfil propio se puede consultar antes de activar.
+      allow read: if request.auth != null
+        && (
+          request.auth.uid == uid
+          || (signed() && staff())
+        );
 
       allow create: if false;
 

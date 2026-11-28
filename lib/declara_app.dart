@@ -1,3 +1,4 @@
+import 'widgets/account_activation_gate.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -108,6 +109,19 @@ class _DeclaraAppState extends State<DeclaraApp> {
               }
 
               if (perfil.data!.exists) {
+                final data = perfil.data!.data()!;
+
+                if (data['accessPolicy'] != null &&
+                    (data['accessPolicy'] != 1 ||
+                        data['accessState'] != 'active')) {
+                  return AccountActivationGate(
+                    key: ValueKey((
+                      uid,
+                      data['accessGeneration'],
+                    )),
+                  );
+                }
+
                 return const Dashboard();
               }
 

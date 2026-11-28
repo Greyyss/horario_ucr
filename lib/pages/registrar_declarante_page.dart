@@ -484,3 +484,7 @@ class _GirasolRegistroState extends State<_GirasolRegistro>
         ),
       );
 }
+
+Widget fondoRegistroUsuarios({required Widget child}) {
+  return _FondoRegistroDeclarante(child: child);
+}

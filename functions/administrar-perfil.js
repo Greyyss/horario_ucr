@@ -1,4 +1,4 @@
-const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { onCall, HttpsError } = require('./activation-https');
 const { getFirestore } = require('firebase-admin/firestore');
 
 exports.asignarSuperior = onCall(

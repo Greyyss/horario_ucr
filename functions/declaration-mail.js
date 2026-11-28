@@ -95,6 +95,23 @@ exports.deliverDeclarationMail = onDocumentCreated({
           data.to.toLowerCase()
       : !recipient.empty;
 
+    if (
+      data.mailType === 'BIENVENIDA_USUARIO' &&
+      recipient.get('accessPolicy') === 1 &&
+      (
+        data.accessGeneration !== recipient.get('accessGeneration') ||
+        recipient.get('accessState') !== 'pending' ||
+        !(recipient.get('accessExpiresAt')?.toMillis() > Date.now())
+      )
+    ) {
+      tx.update(ref, {
+        status: 'cancelled',
+        errorCode: 'INVITATION_SUPERSEDED_OR_EXPIRED',
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      return null;
+    }
+
     if (!validRecipient) {
       tx.update(ref, {
         status: 'cancelled',

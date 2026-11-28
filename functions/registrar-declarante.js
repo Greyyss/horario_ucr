@@ -1,6 +1,10 @@
-const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { newAccessFields } = require('./account-access-policy');
+const { onCall, HttpsError } = require('./activation-https');
 const { getAuth } = require('firebase-admin/auth');
-const { getFirestore } = require('firebase-admin/firestore');
+const {
+  getFirestore,
+  FieldValue,
+} = require('firebase-admin/firestore');
 const { randomBytes } = require('node:crypto');
 const { consultarNombrePorCedula } = require('./padron');
 
@@ -105,6 +109,9 @@ exports.registrarDeclarante = onCall(
 
         tx.create(reserva, { uid: cuenta.uid });
         tx.create(perfil, {
+          ...newAccessFields(),
+          createdBy: superiorId,
+createdAt: FieldValue.serverTimestamp(),
           superiorId,
           superiorName: superiorActual.get('name') || 'Superior asignado',
           name: nombre,

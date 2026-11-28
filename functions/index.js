@@ -1,5 +1,5 @@
 // ADMIN_SCOPE_ONLY
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onCall, HttpsError } = require('./activation-https');
 const logger = require("firebase-functions/logger");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
@@ -11,7 +11,8 @@ Object.assign(exports, require("./declaration-callables"));
 Object.assign(exports, require("./notification-triggers"));
 Object.assign(exports, require("./registro-padron"));
 Object.assign(exports, require('./registrar-declarante'));
-Object.assign(exports, require('./administrar-perfil'));
+Object.assign(exports, require('./administrar-perfil'));Object.assign(exports, require('./crear-usuario-admin'));
+Object.assign(exports, require('./bienvenida-usuario'));
 
 const db = getFirestore();
 const bucket = getStorage().bucket(
@@ -416,3 +417,5 @@ Object.assign(exports, require('./aceptar-declaracion'));
 Object.assign(exports, require('./declaration-mail-events'));
 Object.assign(exports, require('./declaration-mail'));
 Object.assign(exports, require('./signed-pdf'));
+
+Object.assign(exports, require('./account-activation'));

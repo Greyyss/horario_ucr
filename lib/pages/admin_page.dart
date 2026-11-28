@@ -1,7 +1,9 @@
+import 'package:uuid/uuid.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'admin_create_user_page.dart';
 
 typedef _User = QueryDocumentSnapshot<Map<String, dynamic>>;
 
@@ -29,6 +31,7 @@ class _AdminPageState extends State<AdminPage> {
   String _search = '';
   String _filter = '';
   String? _selected;
+  final Map<String, String> _renewalOperations = {};
   String? _role;
   String? _superior;
   bool _busy = false;
@@ -106,6 +109,49 @@ class _AdminPageState extends State<AdminPage> {
         child: Padding(padding: const EdgeInsets.all(16), child: child),
       );
 
+  Future<void> _renewInvitation(_User user) async {
+    final generation = _value(user, 'accessGeneration');
+    final key = user.id + ':' + generation;
+
+    final operation = _renewalOperations.putIfAbsent(
+      key,
+      () => const Uuid().v4(),
+    );
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Renovar invitación'),
+        content: Text(
+          'Se dará un nuevo plazo de diez días a ' +
+              _value(user, 'name') +
+              ' y se solicitará un nuevo correo de bienvenida.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Renovar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    await _run(() async {
+      await FirebaseFunctions.instanceFor(region: 'us-east1')
+          .httpsCallable('renewAccountInvitation')
+          .call({
+        'uid': user.id,
+        'operationId': operation,
+      });
+    }, 'Invitación renovada. El correo quedó solicitado.');
+  }
+
   Widget _details(_User? user, List<_User> users) {
     if (user == null) return _panel(const Text('Seleccioná un usuario.'));
     final self = user.id == FirebaseAuth.instance.currentUser?.uid;
@@ -139,6 +185,31 @@ class _AdminPageState extends State<AdminPage> {
         Text(_value(user, 'name'),
             style: Theme.of(context).textTheme.titleLarge),
         Text(_value(user, 'email')),
+        if (user.data()['accessPolicy'] == 1) ...[
+          const SizedBox(height: 12),
+          Text(
+            user.data()['accessState'] == 'active'
+                ? 'Acceso inicial: activado'
+                : 'Acceso inicial: pendiente',
+          ),
+          if (user.data()['accessState'] == 'pending') ...[
+            if (user.data()['accessExpiresAt'] is Timestamp)
+              Text(
+                'Vence: ' +
+                    (user.data()['accessExpiresAt'] as Timestamp)
+                        .toDate()
+                        .toLocal()
+                        .toString(),
+              ),
+            TextButton.icon(
+              onPressed: _busy || self ? null : () => _renewInvitation(user),
+              icon: const Icon(Icons.mark_email_unread_outlined),
+              label: const Text(
+                'Renovar invitación y reenviar bienvenida',
+              ),
+            ),
+          ],
+        ],
         const SizedBox(height: 20),
         DropdownButtonFormField<String>(
           key: ValueKey((user.id, 'role', nextRole)),
@@ -271,6 +342,23 @@ class _AdminPageState extends State<AdminPage> {
                 spacing: 12,
                 runSpacing: 12,
                 children: [
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: _blue,
+                    ),
+                    onPressed: _busy
+                        ? null
+                        : () async {
+                            await Navigator.push<bool>(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const AdminCreateUserPage(),
+                              ),
+                            );
+                          },
+                    icon: const Icon(Icons.person_add_alt_1),
+                    label: const Text('Crear usuario'),
+                  ),
                   SizedBox(
                     width: 280,
                     child: TextFormField(

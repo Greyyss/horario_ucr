@@ -1,5 +1,5 @@
 'use strict';
-const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { onCall, HttpsError } = require('./activation-https');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { createDeclarationHandlers } = require('./declaration-handlers');
 

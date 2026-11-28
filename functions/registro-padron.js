@@ -1,4 +1,4 @@
-const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { onCall, HttpsError } = require('./activation-registration-https');
 const { getFirestore } = require('firebase-admin/firestore');
 const {
   consultarNombrePorCedula,

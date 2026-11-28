@@ -7,6 +7,7 @@ const MAIL_TYPES = Object.freeze([
   'DEVOLUCION_DECLARANTE',
   'DECLARACION_RRHH',
   'ENVIO_RRHH_DECLARANTE',
+  'BIENVENIDA_USUARIO',
 ]);
 
 const email = value =>
