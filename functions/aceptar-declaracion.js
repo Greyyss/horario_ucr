@@ -1,5 +1,6 @@
 'use strict';
 
+exports.acceptDeclarationAndSendHr = require('./signed-pdf').acceptDeclarationAndSendHr;
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { createHash } = require('node:crypto');

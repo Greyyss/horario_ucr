@@ -291,182 +291,107 @@ function validProfileChanges() {
 
     // DECLARACIONES
     match /declarations/{id} {
-      allow read: if signed() && role() != 'admin' && (
-signed() && canRead(resource.data)
-);
+      function finalDigitalPdf() {
+        let v = resource.data.version;
+        let a = get(/databases/$(database)/documents/declarations/$(id)/versions/$(v)/artifacts/finalPdf).data;
+        let key = id + '--v' + string(v);
+        let w = get(/databases/$(database)/documents/_signatureWorkflows/$(key)).data;
 
-      // Crear contenido solo mediante saveDeclarationValidated.
-      allow create: if signed() && role() != 'admin' && (
-false
-);
+        return a.method == 'DIGITAL_PDF'
+          && a.version == v
+          && w.version == v
+          && w.ownerId == resource.data.ownerId
+          && w.superiorId == resource.data.superiorId
+          && w.superior.sha256 == a.sha256;
+      }
 
-      allow update: if signed() && role() != 'admin' && (
-signed() && (
-        (
-          request.resource.data.version == resource.data.version &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-            'status', 'version', 'updatedAt', 'returnNote'
-          ]) &&
+      allow read: if signed()
+        && role() != 'admin'
+        && canRead(resource.data);
+
+      allow create, delete: if false;
+
+      allow update: if signed()
+        && role() != 'admin'
+        && request.resource.data.version == resource.data.version
+        && request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['status', 'updatedAt', 'returnNote'])
+        && (
           (
-            (
-              owner(resource.data) && (
-                false /* VALIDADA solo mediante el servidor */ ||
-                (resource.data.status == 'VALIDADA' &&
-                 request.resource.data.status == 'PENDIENTE_FIRMA_DECLARANTE') ||
-                
-(resource.data.status == 'PENDIENTE_FIRMA_DECLARANTE' &&
- request.resource.data.status == 'FIRMADA_POR_DECLARANTE' &&
- existsAfter(
-   /databases/$(database)/documents/declarations/$(id)/versions/$(resource.data.version)/signatures/owner
- ) &&
- !exists(
-   /databases/$(database)/documents/declarations/$(id)/versions/$(resource.data.version)/signatures/owner
- )) ||
-
-                (resource.data.status == 'FIRMADA_POR_DECLARANTE' &&
-                 request.resource.data.status == 'PENDIENTE_FIRMA_SUPERIOR') ||
-                false /* Nueva version solo mediante el servidor */ ||
-                (resource.data.status in ['BORRADOR', 'VALIDADA'] &&
-                 request.resource.data.status == 'ANULADA')
-              )
-            ) ||
-            
-            (
-              superior(resource.data) &&
-              resource.data.status == 'PENDIENTE_FIRMA_SUPERIOR' &&
+            owner(resource.data)
+            && (
               (
-                (
-                  request.resource.data.status == 'FIRMADA_POR_SUPERIOR' &&
-                  !exists(
-                    /databases/$(database)/documents/declarations/$(id)/versions/$(resource.data.version)/signatures/superior
-                  ) &&
-                  existsAfter(
-                    /databases/$(database)/documents/declarations/$(id)/versions/$(resource.data.version)/signatures/superior
-                  )
-                ) ||
-                (
-                  request.resource.data.status == 'DEVUELTA' &&
-                  request.resource.data.returnNote is string &&
-                  request.resource.data.returnNote.size() > 0
-                )
+                resource.data.status == 'VALIDADA'
+                && request.resource.data.status == 'PENDIENTE_FIRMA_DECLARANTE'
               )
-            ) ||
-
-                        (
-              superior(resource.data)
-              && resource.data.status == 'FIRMADA_POR_SUPERIOR'
-              && request.resource.data.status == 'ENVIADA_A_RRHH'
-            )
-            ||
-            (
-              role() == 'rrhh'
-              && (
-                (
-                  resource.data.status == 'ENVIADA_A_RRHH'
-                  && request.resource.data.status == 'RECIBIDA_RRHH'
-                )
-                ||
-                (
-                  resource.data.status == 'RECIBIDA_RRHH'
-                  && request.resource.data.status == 'FINALIZADA'
-                )
+              || (
+                resource.data.status in ['BORRADOR', 'VALIDADA']
+                && request.resource.data.status == 'ANULADA'
               )
             )
           )
-        )
-      )
-);
+          || (
+            superior(resource.data)
+            && resource.data.status == 'PENDIENTE_FIRMA_SUPERIOR'
+            && request.resource.data.status == 'DEVUELTA'
+            && request.resource.data.returnNote is string
+            && request.resource.data.returnNote.size() > 0
+          )
+          || (
+            role() == 'rrhh'
+            && (
+              (
+                resource.data.status == 'ENVIADA_A_RRHH'
+                && request.resource.data.status == 'RECIBIDA_RRHH'
+              )
+              || (
+                resource.data.status == 'RECIBIDA_RRHH'
+                && request.resource.data.status == 'FINALIZADA'
+              )
+            )
+            && finalDigitalPdf()
+          )
+        );
 
-      allow delete: if signed() && role() != 'admin' && (
-false
-);
-
-      // VERSIONES
       match /versions/{version} {
-        allow read: if signed() && role() != 'admin' && (
-signed() && canRead(declarationBefore(id))
-);
+        allow read: if signed()
+          && role() != 'admin'
+          && canRead(declarationBefore(id));
 
-        // getAfter permite comprobar la declaracion creada en el mismo batch.
-        allow create: if signed() && role() != 'admin' && (
-false
-); // Solo funciones de servidor.
+        allow write: if false;
 
-        allow update: if signed() && role() != 'admin' && (
-false
-); // Solo funciones de servidor.
+        match /artifacts/{artifactId} {
+          allow read: if signed()
+            && role() != 'admin'
+            && artifactId == 'finalPdf'
+            && canRead(declarationBefore(id));
 
-        allow delete: if signed() && role() != 'admin' && (
-false
-);
+          allow write: if false;
+        }
 
-// Registro del PDF definitivo de esta versión.
-match /artifacts/{artifactId} {
-  allow read: if signed() && role() != 'admin' && (
-signed()
-    && artifactId == 'finalPdf'
-    && canRead(declarationBefore(id))
-);
+        match /signatures/{signatureId} {
+          allow read: if signed()
+            && role() != 'admin'
+            && canRead(declarationBefore(id));
 
-  // Solo el backend administra este registro.
-  allow write: if signed() && role() != 'admin' && (
-false
-);
-}
-
-match /signatures/{signatureId} {
-  allow read: if signed() && role() != 'admin' && (
-signed() && canRead(declarationBefore(id))
-);
-
-  allow create: if signed() && role() != 'admin' && (
-signed() &&
-    request.resource.data.userId == request.auth.uid &&
-    request.resource.data.version == int(version) &&
-    (
-      (
-        signatureId == 'owner' &&
-        owner(declarationAfter(id)) &&
-        declarationBefore(id).status == 'PENDIENTE_FIRMA_DECLARANTE' &&
-        declarationAfter(id).status == 'FIRMADA_POR_DECLARANTE'
-      ) ||
-      (
-        signatureId == 'superior' &&
-        superior(declarationAfter(id)) &&
-        declarationBefore(id).status == 'PENDIENTE_FIRMA_SUPERIOR' &&
-        declarationAfter(id).status == 'FIRMADA_POR_SUPERIOR'
-      )
-    )
-);
-
-  allow update, delete: if signed() && role() != 'admin' && (
-false
-);
-}
+          allow write: if false;
+        }
       }
 
-
-      // HISTORIAL DE EVENTOS
       match /events/{eventId} {
-        allow read: if signed() && role() != 'admin' && (
-signed() && canRead(declarationBefore(id))
-);
+        allow read: if signed()
+          && role() != 'admin'
+          && canRead(declarationBefore(id));
 
-        // getAfter permite el evento de creacion en el mismo batch.
-       
-
-
-
-allow create: if signed() && role() != 'admin' && (
-signed()
+        allow create: if signed()
+          && role() != 'admin'
           && request.resource.data.userId == request.auth.uid
-          && !(request.resource.data.event in ['CREADA', 'MODIFICADA', 'validate', 'newVersion'])
-          && validTransitionEvent(id)
-);
+          && request.resource.data.event in [
+            'submit', 'annul', 'return', 'receive', 'finish'
+          ]
+          && validTransitionEvent(id);
 
-        allow update, delete: if signed() && role() != 'admin' && (
-false
-);
+        allow update, delete: if false;
       }
     }
   }
