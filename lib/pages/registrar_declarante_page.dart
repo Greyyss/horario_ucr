@@ -209,7 +209,7 @@ class _RegistrarDeclarantePageState extends State<RegistrarDeclarantePage> {
                         ),
                         const SizedBox(height: 16),
                         const Text(
-                          'Registrar declarante',
+                          'Datos del declarante',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: _blue,

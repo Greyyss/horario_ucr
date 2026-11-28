@@ -1,4 +1,4 @@
-const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { onCall, HttpsError } = require('./activation-https');
 const { getAuth } = require('firebase-admin/auth');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 
@@ -46,13 +46,10 @@ exports.eliminarPerfil = onCall({
     if (error.code !== 'auth/user-not-found') throw error;
   }
 
-  const declarations = await db.collection('declarations')
-    .where('ownerId', '==', uid).get();
-
-  for (const declaration of declarations.docs) {
-    // El PDF está en Cloud Storage y se conserva.
-    await db.recursiveDelete(declaration.ref);
-  }
+    // Las declaraciones se conservan como expediente histórico:
+  // documentos, versiones, eventos, firmas y referencias a los PDFs.
+  // Tampoco se eliminan sus archivos de Cloud Storage ni los registros
+  // privados de verificación de firmas.
 
   const assigned = await users.where('superiorId', '==', uid).get();
   for (const declarant of assigned.docs) {
