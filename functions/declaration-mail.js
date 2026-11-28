@@ -7,7 +7,7 @@ const {
 } = require('firebase-admin/firestore');
 const { randomUUID, createHash } = require('node:crypto');
 const nodemailer = require('nodemailer');
-const { email } = require('./mail-helpers');
+const { email, MAIL_TYPES } = require('./mail-helpers');
 
 const smtp = defineJsonSecret('DECLARA_SMTP');
 
@@ -50,6 +50,21 @@ exports.deliverDeclarationMail = onDocumentCreated({
 
     const data = current.data();
 
+    // MAIL_HANDOFF_POLICY_V2
+    if (
+      data.mailPolicyVersion !== 2 ||
+      !MAIL_TYPES.includes(data.mailType) ||
+      !data.recipientUid ||
+      !data.expectedRole
+    ) {
+      tx.update(ref, {
+        status: 'cancelled',
+        errorCode: 'OLD_MAIL_POLICY',
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+      return null;
+    }
+
     if (
       !email(data.to) ||
       typeof data.subject !== 'string' ||
@@ -75,6 +90,7 @@ exports.deliverDeclarationMail = onDocumentCreated({
 
     const validRecipient = data.recipientUid
       ? recipient.exists &&
+        recipient.get('role') === data.expectedRole &&
         String(recipient.get('email') || '').trim().toLowerCase() ===
           data.to.toLowerCase()
       : !recipient.empty;

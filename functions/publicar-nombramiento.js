@@ -324,36 +324,63 @@ exports.publicarNombramiento = onCall(options, async (request) => {
       readAt: null,
     });
 
-    const emails = [
-      [
-        declarant,
-        'declarante',
-        'Nombramiento pendiente de revisión',
-        `Su superior le ha remitido un nombramiento para el período ${periodName}. ` +
-          'Ingrese a DeclaraUCR y revise el nombramiento desde Nueva declaración.',
-      ],
-      [
-        superior,
-        'superior',
-        'Confirmación de envío de nombramiento',
-        `Se remitió a ${declarant.get('name') || 'la persona declarante'} ` +
-          `el nombramiento correspondiente al período ${periodName}.`,
-      ],
+    // MAIL_HANDOFF_POLICY_V2
+    const {
+      email,
+      message,
+      appointmentDetails,
+    } = require('./mail-helpers');
+
+    const details = appointmentDetails({
+      workplace: 'Universidad de Costa Rica',
+      unit: declarant.get('unit') || '',
+      position,
+      expectedHours,
+      startDate,
+      endDate,
+      workloadFraction:
+        fractions[expectedHours] || workloadFraction || '',
+      blocks: checked.map(({ from, to, ...block }) => block),
+    });
+
+    const recipients = [
+      {
+        user: declarant,
+        suffix: 'declarante',
+        type: 'NOMBRAMIENTO_DECLARANTE',
+        role: 'declarante',
+      },
+      {
+        user: superior,
+        suffix: 'superior',
+        type: 'COPIA_SUPERIOR',
+        role: 'superior',
+      },
     ];
 
-    for (const [recipient, suffix, subject, text] of emails) {
-      const to = recipient.get('email');
+    for (const recipient of recipients) {
+      const to = String(
+        recipient.user.get('email') || ''
+      ).trim();
 
-      if (typeof to !== 'string' || !to.trim()) continue;
+      if (!email(to)) continue;
 
       tx.create(
-        db.collection('_declarationMailOutbox').doc(`${id}-${suffix}`),
+        db.collection('_declarationMailOutbox')
+          .doc(id + '-' + recipient.suffix),
         {
-          to: to.trim(),
-          subject,
-          text:
-            `Estimado/a ${recipient.get('name') || 'usuario'}:\n\n` +
-            `${text}\n\nDeclaraUCR`,
+          ...message(recipient.type, {
+            name: recipient.user.get('name'),
+            ownerName: declarant.get('name'),
+            superiorName: superior.get('name'),
+            period: periodName,
+            reference: id,
+            details,
+          }),
+          to,
+          recipientUid: recipient.user.id,
+          expectedRole: recipient.role,
+          appointmentId: id,
           status: 'pending',
           createdAt,
         }
