@@ -1,3 +1,4 @@
+import '../widgets/signed_pdf_panel.dart';
 import 'mis_declarantes_page.dart';
 import 'registrar_declarante_page.dart';
 import 'package:flutter/material.dart';
@@ -420,145 +421,139 @@ class _DashboardState extends State<Dashboard> {
   }
 
   Widget _actionsFor(Declaration d, String uid) {
-    return Wrap(
-      spacing: 7,
-      runSpacing: 7,
+    final owner = role == 'declarante' && d.ownerId == uid;
+    final superior = role == 'superior' && d.superiorId == uid;
+
+    final showSigning = (owner &&
+            [
+              'VALIDADA',
+              'PENDIENTE_FIRMA_DECLARANTE',
+              'FIRMADA_POR_DECLARANTE',
+              'PENDIENTE_FIRMA_SUPERIOR',
+              'FIRMADA_POR_SUPERIOR',
+              'ENVIADA_A_RRHH',
+              'RECIBIDA_RRHH',
+            ].contains(d.status)) ||
+        (superior &&
+            [
+              'PENDIENTE_FIRMA_SUPERIOR',
+              'FIRMADA_POR_SUPERIOR',
+              'ENVIADA_A_RRHH',
+              'RECIBIDA_RRHH',
+            ].contains(d.status)) ||
+        (role == 'rrhh' &&
+            [
+              'ENVIADA_A_RRHH',
+              'RECIBIDA_RRHH',
+            ].contains(d.status));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (role == 'declarante' && d.status == 'BORRADOR') ...[
-          _action(
-            d,
-            'validate',
-            'Validar',
-            primary: true,
+        if (showSigning) ...[
+          SignedPdfPanel(
+            key: ValueKey(
+              'firma-' + d.id + '-' + d.version.toString(),
+            ),
+            declaration: d,
+            role: role,
+            extraActions: [
+              if (superior && d.status == 'PENDIENTE_FIRMA_SUPERIOR')
+                _action(d, 'return', 'Devolver'),
+              if (role == 'rrhh' && d.status == 'ENVIADA_A_RRHH')
+                _action(
+                  d,
+                  'receive',
+                  'Recibir',
+                  primary: true,
+                ),
+              if (role == 'rrhh' && d.status == 'RECIBIDA_RRHH')
+                _action(
+                  d,
+                  'finish',
+                  'Finalizar',
+                  primary: true,
+                ),
+            ],
           ),
-          OutlinedButton.icon(
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => EditorPage(existing: d),
+          const SizedBox(height: 10),
+        ],
+        Wrap(
+          spacing: 7,
+          runSpacing: 7,
+          children: [
+            if (owner && d.status == 'BORRADOR') ...[
+              _action(
+                d,
+                'validate',
+                'Validar',
+                primary: true,
               ),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => EditorPage(existing: d),
+                  ),
+                ),
+                icon: const Icon(
+                  Icons.edit_outlined,
+                  size: 16,
+                ),
+                label: const Text('Editar'),
+              ),
+            ],
+            if (owner && d.status == 'DEVUELTA')
+              _action(
+                d,
+                'newVersion',
+                'Crear nueva versión',
+                primary: true,
+              ),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => TimelinePage(id: d.id),
+                ),
+              ),
+              icon: const Icon(Icons.history, size: 16),
+              label: const Text('Historial'),
             ),
-            icon: const Icon(Icons.edit_outlined, size: 16),
-            label: const Text('Editar'),
-          ),
-        ],
-        if (role == 'declarante' && d.status == 'VALIDADA')
-          _action(
-            d,
-            'submit',
-            'Enviar a firma',
-            primary: true,
-          ),
-        if (role == 'declarante' && d.status == 'PENDIENTE_FIRMA_DECLARANTE')
-          _action(
-            d,
-            'signOwner',
-            'Firmar bajo juramento',
-            primary: true,
-          ),
-        if (role == 'declarante' && d.status == 'FIRMADA_POR_DECLARANTE')
-          _action(
-            d,
-            'route',
-            'Remitir al superior',
-            primary: true,
-          ),
-        if (role == 'declarante' && d.status == 'DEVUELTA')
-          _action(
-            d,
-            'newVersion',
-            'Crear nueva versión',
-            primary: true,
-          ),
-        if (role == 'superior' &&
-            d.superiorId == uid &&
-            d.status == 'PENDIENTE_FIRMA_SUPERIOR') ...[
-          _action(
-            d,
-            'acceptSuperior',
-            'Aceptar declaración',
-            primary: true,
-          ),
-          _action(
-            d,
-            'return',
-            'Devolver',
-          ),
-        ],
-        if (role == 'superior' &&
-            d.superiorId == uid &&
-            d.status == 'FIRMADA_POR_SUPERIOR')
-          _action(
-            d,
-            'sendHr',
-            'Aceptar declaración',
-            primary: true,
-          ),
-        if (role == 'rrhh' && d.status == 'ENVIADA_A_RRHH')
-          _action(
-            d,
-            'receive',
-            'Recibir',
-            primary: true,
-          ),
-        if (role == 'rrhh' && d.status == 'RECIBIDA_RRHH')
-          _action(
-            d,
-            'finish',
-            'Finalizar',
-            primary: true,
-          ),
-        OutlinedButton.icon(
-          onPressed: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => TimelinePage(id: d.id),
-            ),
-          ),
-          icon: const Icon(Icons.history, size: 16),
-          label: const Text('Historial'),
+            if (d.status == 'BORRADOR')
+              OutlinedButton.icon(
+                onPressed: _pdfBusy.contains(d.id)
+                    ? null
+                    : () => _runPdf(d, 'preview'),
+                icon: const Icon(
+                  Icons.picture_as_pdf_outlined,
+                  size: 16,
+                ),
+                label: const Text('Vista previa PDF'),
+              ),
+            if (d.status == 'FINALIZADA')
+              OutlinedButton.icon(
+                onPressed:
+                    _pdfBusy.contains(d.id) ? null : () => _runPdf(d, 'open'),
+                icon: const Icon(
+                  Icons.picture_as_pdf_outlined,
+                  size: 16,
+                ),
+                label: const Text('Abrir PDF archivado'),
+              ),
+            if (_pdfBusy.contains(d.id))
+              const Padding(
+                padding: EdgeInsets.all(8),
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                  ),
+                ),
+              ),
+          ],
         ),
-        if (d.status != 'FINALIZADA')
-          OutlinedButton.icon(
-            onPressed:
-                _pdfBusy.contains(d.id) ? null : () => _runPdf(d, 'preview'),
-            icon: const Icon(
-              Icons.picture_as_pdf_outlined,
-              size: 16,
-            ),
-            label: const Text('Vista previa PDF'),
-          ),
-        if (d.status == 'FINALIZADA' && (role == 'rrhh' || role == 'admin'))
-          OutlinedButton.icon(
-            onPressed:
-                _pdfBusy.contains(d.id) ? null : () => _runPdf(d, 'archive'),
-            icon: const Icon(
-              Icons.cloud_upload_outlined,
-              size: 16,
-            ),
-            label: const Text('Archivar PDF'),
-          ),
-        if (d.status == 'FINALIZADA')
-          OutlinedButton.icon(
-            onPressed:
-                _pdfBusy.contains(d.id) ? null : () => _runPdf(d, 'open'),
-            icon: const Icon(
-              Icons.picture_as_pdf_outlined,
-              size: 16,
-            ),
-            label: const Text('Abrir PDF archivado'),
-          ),
-        if (_pdfBusy.contains(d.id))
-          const Padding(
-            padding: EdgeInsets.all(8),
-            child: SizedBox(
-              width: 18,
-              height: 18,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-              ),
-            ),
-          ),
       ],
     );
   }

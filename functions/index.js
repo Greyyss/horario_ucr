@@ -415,3 +415,4 @@ Object.assign(exports, require('./aceptar-declaracion'));
 
 Object.assign(exports, require('./declaration-mail-events'));
 Object.assign(exports, require('./declaration-mail'));
+Object.assign(exports, require('./signed-pdf'));

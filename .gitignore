@@ -33,3 +33,59 @@ Thumbs.db
 node_modules/
 npm-debug.log*
 respaldo-nombramientos-*/
+
+.firma-test/
+tools/firmas_test/functions/node_modules/
+
+# Archivos generados en pruebas de firmas
+/.firma-test/
+
+# Dependencias y compilaciones
+**/node_modules/
+/.dart_tool/
+/build/
+/signature-validator/pdf-renderer/.dart_tool/
+/signature-validator/pdf-renderer/build/
+
+# Python
+**/__pycache__/
+*.pyc
+*.pyo
+**/.venv/
+**/venv/
+
+# Configuración privada de Functions
+/functions/.env
+/functions/.env.*
+!/functions/.env.example
+/functions/.secret.local
+/functions/.runtimeconfig.json
+
+# Configuración privada del entorno de pruebas
+/tools/firmas_test/functions/.env
+/tools/firmas_test/functions/.env.*
+/tools/firmas_test/functions/.secret.local
+/tools/firmas_test/functions/.runtimeconfig.json
+
+# Registros de emuladores
+*-debug.log
+*-debug.*.log
+ui-debug.log
+
+# Ejecutables generados
+/signature-validator/pdf-renderer/render-pdf
+/signature-validator/pdf-renderer/render-pdf.exe
+
+# Claves privadas y certificados personales
+*.key
+*-key.pem
+*.p12
+*.pfx
+
+# Firma de publicación Android
+*.jks
+*.keystore
+**/key.properties
+/android/local.properties
+
+!/signature-validator/trust/raiz-nacional-cr.pem
